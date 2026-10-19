@@ -10,6 +10,7 @@ npx playwright install --with-deps webkit
 node scripts/test_visual.cjs
 WEBKIT=1 node scripts/test_mobile.cjs
 python scripts/test_collectors.py
+python scripts/test_publish.py
 ```
 
 The mobile suite exercises the actual index page at 375, 390 and 430px, all four sports, all four screens and six market selectors. Network fixtures make it deterministic; this does not certify a physical iPhone or upstream feed availability.
@@ -19,7 +20,7 @@ The mobile suite exercises the actual index page at 375, 390 and 430px, all four
 - `collect_scores.py` records ESPN scoreboards and provider-specific quote history for NFL, college football, NBA and MLB.
 - `collect_public.py` samples open Kalshi GAME/SPREAD/TOTAL series across all four sports, retaining per-market collection timestamps and prior transactions on errors. It reads up to 15 events and two markets per event (up to 24 per series, with an eight-minute cycle budget), 100 recent trades per market. This is bounded coverage, not a complete tape.
 - Scheduled collection requests run every 10 minutes. GitHub can delay scheduled workflows; the UI labels observation times and stale snapshots. Direct scoreboard refresh runs every minute while the page is visible.
-- `pages.yml` runs unit and WebKit mobile checks before deploying static assets, including after collector completion. Bot commits alone do not guarantee a Pages rebuild.
+- `pages.yml` runs unit and WebKit mobile checks, requests a build through the existing branch-based Pages publisher, and verifies served file hashes, including after collector completion. It does not create a competing custom Pages deployment. Bot commits alone do not guarantee a Pages rebuild.
 - Quote history starts when collected. First observed quotes are not claimed to be sportsbook opening lines. No earlier history is synthesized.
 
 ## External limitations

@@ -10,18 +10,14 @@ on:
 permissions:
   contents: read
   pages: write
-  id-token: write
 concurrency:
-  group: pages
+  group: lake-house-verified-publish
   cancel-in-progress: false
 jobs:
   verify-deploy:
     if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
     runs-on: ubuntu-latest
-    timeout-minutes: 12
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
         with:
@@ -31,36 +27,10 @@ jobs:
           node-version: '22'
       - run: npm install --no-save --package-lock=false jsdom@26 playwright@1.61.1
       - run: npx playwright install --with-deps webkit
-      - run: python scripts/test_collectors.py
+      - run: python scripts/test_collectors.py && python scripts/test_publish.py
       - run: node --check visual.js && node scripts/test_visual.cjs
       - run: WEBKIT=1 node scripts/test_mobile.cjs
-      - uses: actions/configure-pages@v5
-      - name: Prepare static files only
-        run: |
-          mkdir _site
-          cp index.html visual.js visual.css public-trades.json scoreboards.json _site/
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: _site
-      - uses: actions/deploy-pages@v4
-        id: deployment
-      - name: Verify served deployment assets
+      - name: Publish through existing Pages builder and verify served assets
         env:
-          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
-        run: |
-          python - <<'PYCODE'
-          import hashlib, os, time, urllib.request
-          from pathlib import Path
-          base = os.environ['PAGE_URL'].rstrip('/') + '/'
-          for name in ['index.html', 'visual.js', 'visual.css', 'scoreboards.json', 'public-trades.json']:
-              expected = hashlib.sha256(Path(name).read_bytes()).hexdigest()
-              for attempt in range(6):
-                  with urllib.request.urlopen(base + name + '?verify=' + str(time.time_ns()), timeout=30) as response:
-                      actual = hashlib.sha256(response.read()).hexdigest()
-                  if actual == expected:
-                      print('Verified served asset:', name)
-                      break
-                  if attempt == 5:
-                      raise RuntimeError('Served asset differs from deployment: ' + name)
-                  time.sleep(10)
-          PYCODE
+          GH_TOKEN: ${{ github.token }}
+        run: python scripts/publish_pages.py
