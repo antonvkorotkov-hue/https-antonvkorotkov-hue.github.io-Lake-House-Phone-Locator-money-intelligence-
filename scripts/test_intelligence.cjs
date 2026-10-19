@@ -10,6 +10,8 @@ const meta={now,fetchedAt:time,quote,quoteObservedAt:time};
 for(const sport of ['nfl','college','nba','mlb']){
  const a=analyze(report,event,sport,meta),html=render(report,event,sport,meta);
  assert(a.recommendation.startsWith('PASS'),'No independent calibrated edge, even with substantial source facts');
+ assert(html.includes('Independent winner forecast unavailable'),'Absent predictor cannot be replaced with bookmaker favorite as forecast');
+ assert(html.includes('Bookmaker market favorite:'),'Market leader is shown separately from independent prediction');
  assert(a.projection.includes('unavailable'),'No invented score forecast/range');assert.equal(a.observedMarket.provider,'Source Book');
  assert.equal(a.observedMarket.sourceTime,null,'Retrieval time is not a source update time');assert.equal(a.quotes.length,0,'Recent retrieval does not establish current executable quote');
  assert(Math.abs(a.observedMarket.favorite.homeProbability+a.observedMarket.favorite.awayProbability-1)<1e-12);
