@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - 'scripts/collect_public.py'
+      - 'index.html'
       - '.github/workflows/refresh-public-trades.yml'
   schedule:
     - cron: '*/10 * * * *'
