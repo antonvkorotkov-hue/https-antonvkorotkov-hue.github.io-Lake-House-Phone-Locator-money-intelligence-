@@ -57,7 +57,7 @@ const path=require('node:path');
  for(const value of values.slice(0,4)){await contracts.selectOption(value);assert.equal(await page.locator('#lh-v2-'+id+' [data-lh-contract]').inputValue(),value,'Exact exchange contract selection persists');}
  }
  const observations=page.locator('#lh-v2-'+id+' .lh-c-detail').first();
- if(await observations.count()){await observations.locator('summary').click();assert(await observations.locator('table').isVisible(),'Exact chart observations expand');await observations.locator('summary').click();}
+ if(await observations.count()){const parent=observations.locator('xpath=ancestor::details[contains(@class,"lh-c-metadata")]');if(await parent.count())await parent.locator('summary').first().click();await observations.locator('summary').click();assert(await observations.locator('table').isVisible(),'Exact chart observations expand');await observations.locator('summary').click();if(await parent.count())await parent.locator('summary').first().click();}
  const splitTable=page.locator('#lh-v2-'+id+' .lh-split-table');
  if(await splitTable.count())assert(await splitTable.evaluate(table=>getComputedStyle(table.querySelector('thead th')).whiteSpace==='nowrap'&&getComputedStyle(table.parentElement).overflowX==='auto'),'Split headers remain legible in a locally scrollable table');
  if(width===390){if(tab==='games'||tab==='money')await page.locator('#lh-v2-'+id+' [data-lh-market="winner"]').click();await page.screenshot({path:path.join(evidenceDir,sport+'-'+tab+'-390.png'),fullPage:true});}
