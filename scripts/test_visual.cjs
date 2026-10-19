@@ -27,7 +27,7 @@ assert.ok(q('lh-v2-games').textContent.includes('SF -6.5'),'Published spread dis
 assert.ok(q('lh-v2-games').textContent.includes('Not published'),'Missing markets visibly unavailable');
 assert.ok(q('lh-v2-games').querySelector('svg.lh-v2-line'),'Real-trade SVG renders');
 assert.ok(q('lh-v2-games').textContent.includes('Team comparison'),'Team stats render');
-assert.ok(q('lh-v2-trades').textContent.includes('Recorded'),'Trades screen renders');
+assert.ok(q('lh-v2-trades').querySelector('svg.lh-v2-line'),'Trades screen renders a verified trade chart');
 assert.ok(q('lh-v2-scores').textContent.includes('Player leaders'),'Scores screen renders');
 q('lh-v2-event').dispatchEvent(new w.Event('change',{bubbles:true}));
 w.document.body.dataset.tab='money';
