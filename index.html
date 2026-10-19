@@ -225,11 +225,13 @@ async function findExchangeMarkets(){
   const series=document.getElementById('exLeague').value;
   const raw=await exchangeJSON('/events?status=open&series_ticker='+encodeURIComponent(series)+'&with_nested_markets=true&limit=100');
   if(!Array.isArray(raw.events))throw Error('Unexpected event response');
-  const m=raw.events.flatMap(e=>(e.markets||[]).map(x=>({...x,gameTitle:e.title||e.event_ticker}))).filter(x=>x.ticker).slice(0,100);
+  let m=raw.events.flatMap(e=>(e.markets||[]).map(x=>({...x,gameTitle:e.title||e.event_ticker}))).filter(x=>x.ticker).slice(0,100);
+  // Some sports series are renamed or have no currently-open games. Try a general open-event search and filter for the sport.
+  if(!m.length){const all=await exchangeJSON('/events?status=open&with_nested_markets=true&limit=200');const names={KXNFLGAME:/\\bnfl\\b|football|super bowl/i,KXNFLSPREAD:/\\bnfl\\b|football/i,KXNFLTOTAL:/\\bnfl\\b|football/i,KXCFBGAME:/college football|ncaa football|cfb/i,KXNBAGAME:/\\bnba\\b|basketball/i,KXMLBGAME:/\\bmlb\\b|baseball/i};const matcher=names[series];m=(all.events||[]).filter(e=>matcher?.test((e.title||'')+' '+(e.series_ticker||''))).flatMap(e=>(e.markets||[]).map(x=>({...x,gameTitle:e.title||e.event_ticker}))).filter(x=>x.ticker).slice(0,100);}
   const blank=document.createElement('option');blank.value='';blank.textContent='Select '+m.length+' published markets';sel.append(blank);
   m.forEach(x=>{const opt=document.createElement('option');opt.value=x.ticker;opt.textContent=(x.gameTitle+' • '+(x.subtitle||x.title||x.ticker)).slice(0,110);sel.append(opt)});
   status.textContent=m.length?'MARKETS FOUND':'NO OPEN MARKETS';
-  document.getElementById('exSummary').textContent=m.length+' open markets returned by Kalshi; select a game to retrieve individual reported transactions. Results depend on API availability and market coverage.';
+  document.getElementById('exSummary').textContent=m.length+' open markets returned by Kalshi. If none are open, enter an exact historical or current market ticker below. Games and series are not guaranteed to be listed.';
  }catch(e){status.textContent='UNAVAILABLE';document.getElementById('exSummary').textContent='Market feed unavailable on this device: '+e.message+'. This may be a browser access restriction.';}
 }
 let exObserved=[];
@@ -268,11 +270,12 @@ async function readExchangeTrades(){
   partial=Boolean(cursor);
   const trades=rawTrades.map(t=>{
    const side=t.taker_outcome_side||t.taker_side;
-   const contracts=Number(t.count_fp),price=Number(side==='no'?t.no_price_dollars:t.yes_price_dollars);
-   const time=Date.parse(t.created_time);
+   const contracts=Number(t.count_fp??t.count),price=Number(side==='no'?(t.no_price_dollars??(t.no_price!=null?Number(t.no_price)/100:NaN)):(t.yes_price_dollars??(t.yes_price!=null?Number(t.yes_price)/100:NaN)));
+   const time=Date.parse(t.created_time||t.created_at||'');
    return {id:t.trade_id,side,contracts,time,premium:contracts*price};
   }).filter(t=>(t.side==='yes'||t.side==='no')&&Number.isFinite(t.time)&&Number.isFinite(t.contracts)&&t.contracts>0&&Number.isFinite(t.premium)&&t.premium>=0).sort((a,b)=>a.time-b.time);
   exObserved=trades;drawExchangeHistory(ticker,trades,partial);exLast=Date.now();
+  try{localStorage.setItem('lakehouse-last-exchange',JSON.stringify({ticker,seenAt:exLast,trades:trades.slice(-5000),partial}));}catch(e){}
  }catch(e){status.textContent='FEED UNAVAILABLE';sum.textContent='Could not read public trade data: '+e.message+'. Browser access may be blocked. No values fabricated.';exLast=Date.now()}
 }
 document.getElementById('exFind').addEventListener('click',findExchangeMarkets);
@@ -282,4 +285,5 @@ document.getElementById('exLeague').addEventListener('change',findExchangeMarket
 document.getElementById('exMarket').addEventListener('change',readExchangeTrades);
 setInterval(()=>{if(!document.hidden&&(document.getElementById('exMarket').value||document.getElementById('exTickerManual').value)&&Date.now()-exLast>60000)readExchangeTrades()},60000);
 findExchangeMarkets();
+try{const prior=JSON.parse(localStorage.getItem('lakehouse-last-exchange')||'null');if(prior?.ticker&&Array.isArray(prior.trades)&&prior.trades.length){document.getElementById('exTickerManual').value=prior.ticker;drawExchangeHistory(prior.ticker,prior.trades,prior.partial);document.getElementById('exStatus').textContent='CACHED HISTORY';document.getElementById('exSummary').textContent+=' Historical sample stored '+new Date(prior.seenAt).toLocaleString()+'; refreshing now.';readExchangeTrades()}}catch(e){}
 </script></body></html>
