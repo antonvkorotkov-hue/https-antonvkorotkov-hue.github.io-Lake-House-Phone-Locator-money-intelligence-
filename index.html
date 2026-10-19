@@ -328,8 +328,7 @@ function renderTopExchangeSnapshot(doc){
  const total=trades.reduce((acc,x)=>acc+Number(x.t.premium_usd),0);
  document.getElementById('topMarketCount').textContent=markets.length.toLocaleString();
  document.getElementById('topTradeCount').textContent=trades.length.toLocaleString();
- document.getElementById('topPremium').textContent=trades.length?'
-+total.toLocaleString(undefined,{maximumFractionDigits:0}):'—';
+ document.getElementById('topPremium').textContent=trades.length?'USD '+total.toLocaleString(undefined,{maximumFractionDigits:0}):'—';
  const at=doc.collected_at?new Date(doc.collected_at):null;
  const stale=!at||!Number.isFinite(at.getTime())||Date.now()-at.getTime()>30*60000;
  title.textContent=at&&Number.isFinite(at.getTime())?'Source: Kalshi • sampled at '+at.toLocaleString()+(stale?' • STALE':' • current snapshot'):'Waiting for first collector snapshot';
@@ -337,8 +336,7 @@ function renderTopExchangeSnapshot(doc){
   const item=document.createElement('div');item.className='tradeentry';
   const heading=document.createElement('strong');heading.textContent=m.event||m.ticker;item.append(heading);
   const n=document.createElement('div');const sum=m.trades.reduce((a,t)=>a+(Number(t.premium_usd)||0),0);
-  n.textContent=m.trades.length+' reported trades · 
-+sum.toLocaleString(undefined,{maximumFractionDigits:2})+' sampled traded premium';item.append(n);holder.append(item);
+  n.textContent=m.trades.length+' reported trades · USD '+sum.toLocaleString(undefined,{maximumFractionDigits:2})+' sampled traded premium';item.append(n);holder.append(item);
  }
  if(!markets.length){const n=document.createElement('p');n.textContent='No public trades collected yet. '+(doc.errors||[]).slice(0,2).join(' · ');holder.append(n)}
 }
