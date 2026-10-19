@@ -1,0 +1,27 @@
+name: Visual app regression
+on:
+  push:
+    paths:
+      - 'visual.js'
+      - 'visual.css'
+      - 'index.html'
+      - 'scripts/test_visual.cjs'
+      - '.github/workflows/visual-regression.yml'
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: JavaScript syntax
+        run: node --check visual.js && node --check scripts/test_visual.cjs
+      - name: Install DOM test dependency
+        run: npm install --no-save --package-lock=false jsdom@26
+      - name: Verify Games Trades Scores interactions
+        run: node scripts/test_visual.cjs
