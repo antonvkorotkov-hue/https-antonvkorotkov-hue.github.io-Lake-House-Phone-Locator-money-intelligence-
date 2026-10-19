@@ -12,7 +12,7 @@ root.innerHTML='<div class="lh-v2-head"><div><span class="lh-v2-eyebrow">LAKE HO
 const insertion=$('lhVisualHero')||$('gameMoney')||$('scoreboardSection');if(!insertion)return;
 insertion.parentNode.insertBefore(root,insertion);
 document.body.classList.add('lh-v2');
-const leagueTicker={nfl:['KXNFL'],college:['KXCFB'],nba:['KXNBA'],mlb:['KXMLB']};
+const leagueTicker={nfl:['KXNFL'],college:['KXNCAAF','KXCFB'],nba:['KXNBA'],mlb:['KXMLB']};
 const marketLabel={winner:'Winner / moneyline',spread:'Alternative winning margins (not sportsbook spread)',total:'Exchange total thresholds (not O/U odds)',team:'Team total O/U',half:'First-half markets',props:'Player props'};
 function leagueFor(m){return (leagueTicker[state.sport]||[]).some(prefix=>String(m.series||'').startsWith(prefix))}
 function shortName(event){return event?.shortName||event?.name||event?.id||'Matchup'}

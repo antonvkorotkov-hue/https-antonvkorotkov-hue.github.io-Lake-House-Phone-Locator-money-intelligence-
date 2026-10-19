@@ -9,7 +9,7 @@ import math
 from pathlib import Path
 
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
-SERIES = [prefix + kind for kind in ("GAME", "SPREAD", "TOTAL") for prefix in ("KXNFL", "KXCFB", "KXNBA", "KXMLB")]
+SERIES = [prefix + kind for kind in ("GAME", "SPREAD", "TOTAL") for prefix in ("KXNFL", "KXNCAAF", "KXNBA", "KXMLB")]
 UTC = dt.timezone.utc
 def request(path, params):
     query = urllib.parse.urlencode(params)
