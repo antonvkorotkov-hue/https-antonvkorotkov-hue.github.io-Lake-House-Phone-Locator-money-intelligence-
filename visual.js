@@ -23,7 +23,7 @@ function selectedMarkets(){
  const key=selectedMarketKey();if(key)return state.markets.filter(m=>tickerGame(m)===key);
  const ev=selectedEvent();if(!ev)return [];
  const pair=participants(ev),a=pair.away?.team?.abbreviation||'',h=pair.home?.team?.abbreviation||'';
- const aliases=x=>x==='WSH'?['WSH','WAS']:x==='JAX'?['JAX','JAC']:[x];
+ const aliases=x=>x==='WSH'||x==='WAS'?['WSH','WAS']:x==='JAX'||x==='JAC'?['JAX','JAC']:x==='LV'?['LV','LVR']:x==='LAR'?['LAR','LA']: [x];
  return state.markets.filter(m=>{const key=tickerGame(m);return aliases(a).some(x=>key.includes(x))&&aliases(h).some(x=>key.includes(x))});
 }
 function availableMarkets(){return state.markets.filter(leagueFor)}
@@ -71,12 +71,21 @@ function priceBoard(){
 function tradePanel(){
  const all=selectedMarkets(),subset=all.filter(relevantSeries);
  const collected=state.collected?new Date(state.collected):null,stale=!collected||Date.now()-collected.getTime()>1800000;
- if(['team','half','props'].includes(state.market))return '<article class="lh-v2-panel lh-v2-unavailable"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>DATA NOT CONNECTED</small></div><p>There is no verified market feed for this category. Showing zero transactions would be misleading.</p><p class="lh-v2-note">Choose Moneyline, Spread, or Total for observed exchange contracts. No team-total or player-prop odds are invented.</p></article>';
- return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>'+(stale?'STALE SNAPSHOT':'Kalshi public trades')+'</small></div>'+(subset.length?tradeStats(subset)+'<h3 class="lh-v2-chart-title">Recorded trade premium by time interval</h3>'+spark(subset):'<div class="lh-v2-nochart">No recorded '+esc(marketLabel[state.market].toLowerCase())+' contracts for this matchup in the current sample.</div>')+'<p class="lh-v2-note">'+esc(state.tradeError||'Sampled exchange premium, not sportsbook betting handle. Spread contracts are winning margins, and total contracts are individual thresholds.')+'</p></article>';
+ if(['team','half','props'].includes(state.market)){
+  const samples=tradesForMarkets(all),sum=samples.reduce((n,x)=>n+Number(x.t.premium_usd),0);
+  const available=all.filter(m=>(m.trades||[]).length).map(m=>esc(m.market||m.ticker)).slice(0,4).join(' · ');
+  return '<article class="lh-v2-panel lh-v2-unavailable"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>BOOK ODDS NOT CONNECTED</small></div>'+
+   '<p>No verified '+esc(marketLabel[state.market].toLowerCase())+' prices or trades are available. This is not a zero betting volume result.</p>'+
+   '<h3 class="lh-v2-chart-title">Other observed exchange activity for this matchup</h3>'+
+   (samples.length?tradeStats(all)+'<p>'+esc(available||'Exchange transactions')+'</p>'+spark(all):'<div class="lh-v2-nochart">No matching exchange transactions in the published snapshot.</div>')+
+   '<p class="lh-v2-note">Snapshot: '+esc(collected?collected.toLocaleString():'Unavailable')+(stale?' · STALE':'')+'. The '+samples.length+' trades and '+money(sum)+' are sampled Kalshi contract premiums across other markets, NOT team-total action, sportsbook handle or DraftKings/FanDuel bets.</p></article>';
+ }
+
+ return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>'+(stale?'STALE SNAPSHOT':'Kalshi public trades')+'</small></div>'+(subset.length?tradeStats(subset)+'<h3 class="lh-v2-chart-title">Recorded trade premium by time interval</h3>'+spark(subset):'<div class="lh-v2-nochart">No recorded '+esc(marketLabel[state.market].toLowerCase())+' contracts for this matchup in the current sample.</div>')+'<p class="lh-v2-note">Snapshot: '+esc(collected?collected.toLocaleString():'Unavailable')+(stale?' · STALE':'')+'. '+esc(state.tradeError||'Sampled Kalshi exchange premium, not sportsbook betting handle. Spread contracts are winning margins and totals are individual thresholds.')+'</p></article>';
 }
 function analysis(){
  const ms=selectedMarkets(),num=tradesForMarkets(ms).length,quote=selectedEvent()?.competitions?.[0]?.odds?.[0];
- let text='Available: '+num+' recorded exchange transactions'+(quote?' and a published game quote.':'. No published sportsbook quote for this game.');
+ let text='For this matchup: '+num+' sampled exchange transactions'+(quote?' and a published game quote.':'. No published sportsbook quote for this game.');
  text+=' Without verified team totals, current injury status, market price history and betting splits, no priced edge can be confirmed.';
  return '<article class="lh-v2-insight"><h2>✦ MARIA INSIGHT</h2><p>'+esc(text)+'</p><small>Evidence based · No guaranteed pick</small></article>';
 }
