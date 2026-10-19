@@ -35,7 +35,10 @@ const path=require('node:path');
  const button=page.locator('#lh-v2-'+id+' [data-lh-market="'+market+'"]');
  assert.equal(await button.count(),1,'Each supported market has a selector');await button.click();
  assert.equal(await button.getAttribute('aria-pressed'),'true',sport+' '+market+' selected');
- if(['team','half','props'].includes(market))assert.match(await page.locator('#lh-v2-'+id).innerText(),/No verified feed|unavailable|No matching/i,'Unconfigured feed is explicitly unavailable');
+ if(['team','half','props'].includes(market)){
+ const panel=page.locator('#lh-v2-'+id),hasExchange=await panel.locator('[data-lh-contract]').count();
+ assert.match(await panel.innerText(),hasExchange?/Kalshi public exchange/i:/No verified feed|unavailable|No matching/i,hasExchange?'Verified exchange alternative is attributed':'Unconfigured feed is explicitly unavailable');
+ }
  }
  assert(!/NaN|undefined|Invalid Date/.test(await page.locator('#lh-v2-'+id).innerText()),'No invalid generated values');
  assert(await page.evaluate(()=>{const ids=[...document.querySelectorAll('#lh-v2 [id]')].map(x=>x.id);return ids.length===new Set(ids).size}),'Unique application control IDs');

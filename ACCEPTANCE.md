@@ -24,7 +24,7 @@ Supported application behavior and unavailable external coverage are separate. P
 | Sportsbook First Half | BLOCKED | No verified automated sportsbook half-price feed available. No inferred half lines. |
 | Sportsbook Player Props | BLOCKED | No verified automated sportsbook prop-price feed available. No invented player lines. |
 | Exchange winner/spread/total alternatives | PASS | Genuine Kalshi sampled contracts, exact outcomes, quote/tape distinction; source collection is bounded, not complete. |
-| Exchange team/half/player alternatives | PASS | Refreshed real snapshot: 202 contracts / 8,391 observed trades, including 8 team-total, 12 half and 16 player-prop contracts; exact-contract rendering and integrity tests. Not all instruments are offered in every sport. |
+| Exchange team/half/player alternatives | PASS | Refreshed real snapshot: 292 contracts / 7,351 observed trades, including 14 team-total, 20 half and 30 player-prop contracts; exact-contract rendering and integrity tests. Not all instruments are offered in every sport. |
 | Injuries / availability | PASS | Source list/status/date only; failed request is not a healthy-roster claim; absent list explicitly unknown. |
 | Weather | PASS | Supplied source weather and units, including zero temperature; unavailable weather explicitly unknown. No invented forecast. |
 | Home field / venue | PASS | Exact home/away/neutral venue and supplied team records; no arbitrary points adjustment. |
@@ -44,8 +44,8 @@ Supported application behavior and unavailable external coverage are separate. P
 | iPhone viewport / Safari engine checks | PASS | WebKit touch tests at 375/390/430px: 144 market interactions, all scoreboard games, all screens, refresh, selectors, observation tables, no errors/document overflow. |
 | Actual rendered inspection | PASS | 16 real-snapshot WebKit screens plus deterministic stress fixtures inspected. Eight actual ESPN logo endpoints returned HTTP200. |
 | Physical device certification | BLOCKED | No physical iPhone session was available; WebKit emulation is reported accurately, not physical-device testing. |
-| Scheduled collection | FAIL | New scripts/workflow prepared; final Actions run and refreshed category coverage pending. Schedules are best effort, requested every ten minutes. |
-| Latest Pages release and served assets | FAIL | Final release commit, Actions result and thirteen served asset hashes pending. |
+| Scheduled collection | PASS | Actions run 39331222167 succeeded and pushed d1784fef1d; 292 contracts / 7,351 sampled trades, zero request errors and nine explicit sampling warnings. ESPN reports and split preview also refreshed successfully. Schedules are best effort, requested every ten minutes. |
+| Latest Pages release and served assets | PASS | Release 5ef3ff5cf4: verify/deploy run 39331221965 passed all suites and thirteen served-file hash comparisons; Pages run 39331427911 succeeded. The final guard/evidence follow-up uses the same required deployment gate; its final result is linked in the delivery message. |
 
 ## Evidence and reproduction
 
@@ -56,3 +56,13 @@ Automated suites: test_visual.cjs, test_analytics.cjs, test_charts.cjs, test_fai
 ## External-data limits
 
 ESPN public responses can omit injuries, weather, players, stats or prices. Public DK/FanDuel candidate pages returned Site Unavailable, and the VSiN FanDuel candidate returned an error page. Authorized direct feeds are not configured. The VSiN DK preview exposes a limited matched MLB row; publication/update time is absent. Kalshi products are exchange contracts, not DraftKings/FanDuel bets, ticket percentages or total betting handle. Sampling/retention and bounded report caching are documented in SOURCE-AUDIT.md.
+
+## Release evidence
+
+Implementation commit: 5ef3ff5cf41da02475314f5b4f50b7b4ccf9c855. Refreshed data commit: d1784fef1d61475730dbd03ea45c44fb9c9a9201. The following guard/evidence commit is the final release follow-up; its exact SHA and required check results are visible in GitHub history and Actions.
+
+Verify/deploy: https://github.com/antonvkorotkov-hue/https-antonvkorotkov-hue.github.io-Lake-House-Phone-Locator-money-intelligence-/actions/runs/39331221965
+
+Collection: https://github.com/antonvkorotkov-hue/https-antonvkorotkov-hue.github.io-Lake-House-Phone-Locator-money-intelligence-/actions/runs/39331222167
+
+Marcus release review: supported local acceptance rows passed; external limitations remain BLOCKED above. Theo independently exercised component and mobile checks. Rimma independently reviewed integrity, source boundaries and completion claims. Release approval is conditional on the follow-up commit passing CI and served hashes; the delivery message records that final gate result. MLB fallback regression prevents moneyline details from being mislabeled as a run line.

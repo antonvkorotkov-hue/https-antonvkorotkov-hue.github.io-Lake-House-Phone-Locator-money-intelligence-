@@ -65,10 +65,11 @@ assert.ok(!q('lh-v2-games').querySelector('svg.lh-c-svg'),'Reject trades from a 
 // Null and absent observations remain unavailable, never zero prices.
 assert.ok(q('lh-v2-games').textContent.includes('Not published'));
 // Real exchange tickers include MLB ET game-date/time and league-specific team aliases.
-async function verifyMapping({sport,away,home,ticker,date='2026-10-20T00:00:00Z',doubleheader=false,expected=true}){
+async function verifyMapping({sport,away,home,ticker,date='2026-10-20T00:00:00Z',doubleheader=false,expected=true,missingRunLine=false}){
  const d=new JSDOM('<!doctype html><body data-tab="games"><div id="lhVisualHero"></div><nav class="mobile-bottom"><button data-screen="games">Games</button><button data-screen="money">Trades</button><button data-screen="scores">Scores</button><button data-screen="more">More</button></nav></body>',{url:'https://example.org/',runScripts:'outside-only'});
  const x=d.window;x.AbortSignal=AbortSignal;
  const game={id:'mapping-1',shortName:away+' @ '+home,date,status:{type:{state:'pre',detail:'Scheduled'}},competitions:[{competitors:[{homeAway:'away',team:{id:'1',abbreviation:away}},{homeAway:'home',team:{id:'2',abbreviation:home}}]}]};
+ if(missingRunLine)game.competitions[0].odds=[{provider:{name:'Verified fixture book'},details:'TB -158',moneyline:{home:{close:{odds:'-158'}},away:{close:{odds:'+130'}}}}];
  const games=doubleheader?[game,{...game,id:'mapping-2',date:'2026-10-19T21:00:00Z'}]:[game];
  const mappedMarket={series:ticker.split('-')[0],ticker,event_ticker:ticker.slice(0,ticker.lastIndexOf('-')),market:'Exact verified test contract',trades:market.trades};
  x.fetch=async address=>{
@@ -84,9 +85,11 @@ async function verifyMapping({sport,away,home,ticker,date='2026-10-20T00:00:00Z'
  const contract=x.document.querySelector('#lh-v2-games [data-lh-contract]');
  assert.equal(Boolean(contract),expected,sport+' '+away+'/'+home+' '+ticker+' matched='+expected);
  if(expected)assert.equal(contract.value,ticker,'Exact contract retained after alias/time mapping');
+ if(missingRunLine){const card=[...x.document.querySelectorAll('#lh-v2-games .lh-v2-odd')].find(el=>/Spread|run line/i.test(el.querySelector('small')?.textContent||''));assert(card,'MLB run-line card exists');assert.equal(card.querySelector('strong').textContent,'Not published','Moneyline-style details must never masquerade as an MLB run line');assert(x.document.getElementById('lh-v2-games').textContent.includes('TB -158'),'Actual moneyline remains displayed in its proper market');}
  d.window.close();
 }
 await verifyMapping({sport:'mlb',away:'CLE',home:'TB',ticker:'KXMLBGAME-26OCT192008CLETB-CLE'});
+await verifyMapping({sport:'mlb',away:'CLE',home:'TB',ticker:'KXMLBGAME-26OCT192008CLETB-CLE',missingRunLine:true});
 await verifyMapping({sport:'mlb',away:'CLE',home:'TB',ticker:'KXMLBGAME-26OCT192008CLETB-CLE',doubleheader:true,expected:false});
 await verifyMapping({sport:'mlb',away:'CLE',home:'TB',ticker:'KXMLBGAME-26OCT19CLETB-CLE',doubleheader:true,expected:false});
 await verifyMapping({sport:'mlb',away:'CLE',home:'TB',ticker:'KXMLBGAME-26OCT202008CLETB-CLE',expected:false});

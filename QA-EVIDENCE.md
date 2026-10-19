@@ -22,7 +22,7 @@ This report distinguishes verified interface behavior from upstream coverage. Br
 | Manual research and backups | PASS | `test_research.cjs` verifies game/sport scoping, field validation, null preservation, escaped text, CSV formula protection, export/import deduplication/conflicts, damaged-storage lock/raw export/confirmed reset, and quota errors. |
 | Legacy saved data safety | PASS | Browser starts with malicious legacy stored strings; they never execute. Legacy inline runtime and legacy controls are removed; raw backup remains available through the new manual module. |
 | Render inspection | PASS | Actual full-page WebKit screenshots generated for all 16 sport/screen combinations at 390px and inspected. Fixture summaries are clearly QA data, not production observations. |
-| Latest Pages assets / final release | BLOCKED | Root release owner must record final deployed commit and served-asset verification after integration. Local QA alone does not prove deployment. |
+| Pages assets / scheduled collection | PASS | Root-provided evidence: source release `5ef3` deployment gate `39331221965` passed all 13 served-asset hashes; collector `39331222167` passed and produced 292 contracts / 7,351 observed trades. The final follow-up commit must pass the same release gate. |
 
 ## Reproduction
 
