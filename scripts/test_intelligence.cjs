@@ -36,6 +36,12 @@ const foreign=structuredClone(report);foreign.injuries.push({team:{id:'foreign'}
 const hostile=structuredClone(report);hostile.gameInfo.venue.fullName='<img src=x onerror=alert(1)>';assert(render(hostile,event,'nfl',meta).includes('&lt;img'));
 const pregame=structuredClone(event);pregame.status.type={state:'pre',detail:'Scheduled'};pregame.competitions[0].competitors.forEach(t=>t.score='0');
 const pre=analyze(report,pregame,'nfl',{});assert.equal(pre.home.score,'');assert.equal(pre.away.score,'');assert.equal(pre.players.length,0);assert.equal(pre.comparisons.length,0);assert.equal(pre.scoring.length,0);assert(pre.missing.some(t=>t.includes('season statistics')),'Pregame season fields are not game-performance facts');
+assert.equal(pre.clock,'','Pregame source placeholder clock is withheld');
+assert.equal(analyze(report,event,'nfl',meta).clock,'5:12','Live football clock retained verbatim');
+assert.equal(analyze(report,event,'college',meta).clock,'5:12','Live college football clock retained verbatim');
+const completed=structuredClone(event);completed.status.type={state:'post',detail:'Final'};completed.status.displayClock='0:00';
+assert.equal(analyze(report,completed,'nfl',meta).clock,'','Final-game placeholder clock withheld');
+assert.equal(analyze(report,event,'mlb',meta).clock,'','Baseball has no football-style running clock');
 const stale=analyze(report,event,'nfl',{...meta,fetchedAt:new Date(now-300001).toISOString()});assert.equal(stale.fresh,false);assert(stale.missing.some(t=>t.includes('stale')));assert(!stale.facts.some(t=>t.startsWith('Recent observed scoring window')));
 assert.equal(analyze(report,event,'nfl',{...meta,fetchedAt:now-60000}).fresh,true,'Numeric retrieval milliseconds supported');
 const future=analyze(report,event,'nfl',{...meta,fetchedAt:now+1});assert(!future.fresh);assert(future.missing.some(t=>t.includes('future')));
@@ -44,6 +50,9 @@ const rich=structuredClone(report);rich.gameInfo.weather={temperature:0,temperat
 rich.lastFiveGames=[{team:home,events:[{gameResult:'W',gameDate:'2026-10-18T20:00:00Z',score:'24-17',opponent:{abbreviation:'OPP'}},{gameResult:'L',gameDate:'2027-01-01T20:00:00Z',score:'0-99'}]},{team:{id:'foreign'},events:[{gameResult:'W',gameDate:time,score:'999'}]}];
 rich.drives={previous:[{team:home,displayResult:'Touchdown',yards:75,offensivePlays:8},{team:{id:'foreign'},displayResult:'Foreign Drive'}]};rich.rosters=[{team:away,roster:[{starter:true,athlete:{displayName:'Roster Starter'}},{athlete:{displayName:'Appearance Only'}}]}];
 const enriched=analyze(rich,event,'nfl',meta);assert(enriched.facts.some(t=>t.includes('Temperature 0 F')));assert.equal(enriched.history.length,1);assert(!enriched.history[0].includes('0-99'),'Future history rejected');assert.equal(enriched.drives.length,1);assert(!render(rich,event,'nfl',meta).includes('Foreign Drive'));assert(enriched.lineups.some(p=>p.name==='Roster Starter'));assert(!enriched.lineups.some(p=>p.name==='Appearance Only'));
+const noIdsEvent=structuredClone(event),noIdsReport=structuredClone(report);noIdsEvent.competitions[0].competitors.forEach(c=>delete c.team.id);
+for(const group of [...noIdsReport.boxscore.teams,...noIdsReport.boxscore.players,...noIdsReport.injuries,...noIdsReport.lineups])delete group.team.id;
+const noIds=analyze(noIdsReport,noIdsEvent,'nfl',meta);for(const key of ['comparisons','players','injuries','lineups'])assert.equal(noIds[key].length,0,'Missing team identities withhold unscoped '+key);
 assert.equal(analyze({},null,'nfl',{quote:structuredClone(quote)}).observedMarket,null,'No selected game cannot accept a detached quote');
 assert.equal(analyze({},null,'nfl',{now,verifiedQuotes:[{...fresh,eventId:''}]}).quotes.length,0,'Empty event identity cannot qualify a current quote');
 const savedSources=JSON.parse(fs.readFileSync('scoreboards.json','utf8')),coverage={};
@@ -62,4 +71,26 @@ for(const sport of ['nfl','college','nba','mlb']){
  assert(coverage[sport]>0,'At least one saved real-source report available for '+sport+'; missing evidence must be recorded as a release blocker');
 }
 console.log('Real-source intelligence coverage:',JSON.stringify(coverage),'MLB has only the available source matchup; no extra game invented.');
+// Published ESPN estimates are distinct from market arithmetic and our own forecasts.
+const forecastEvent=structuredClone(pregame),forecastReport=structuredClone(report);
+forecastReport.predictor={header:'Matchup Predictor',homeTeam:{id:'1',gameProjection:'60'},awayTeam:{id:'2',gameProjection:'40'}};
+const forecastMeta={...meta,quote:forecastEvent.competitions[0].odds[0]};
+const published=analyze(forecastReport,forecastEvent,'nfl',forecastMeta);
+assert.equal(published.predictor.homePercentage,60);assert.equal(published.predictor.awayPercentage,40);assert.equal(published.predictor.likelySide,'Home Team');assert.equal(published.predictor.sourceTime,null,'Unknown predictor update time is never inferred from retrieval');assert(published.predictor.source.includes('ESPN'));assert(published.recommendation.startsWith('PASS'),'Published predictor and matching market favorite do not establish an independent edge');
+const publishedHtml=render(forecastReport,forecastEvent,'nfl',forecastMeta);assert(publishedHtml.includes('60'));assert(publishedHtml.includes('40'));assert(/agreement|disagreement|not.*edge/i.test(publishedHtml),'Market/model comparison is not marketed as an edge');
+for(const pair of [[{id:'2',gameProjection:'60'},{id:'1',gameProjection:'40'}],[{id:'foreign',gameProjection:'60'},{id:'2',gameProjection:'40'}],[{id:'1',gameProjection:'101'},{id:'2',gameProjection:'-1'}],[{id:'1',gameProjection:'60'},{id:'2',gameProjection:'60'}],[{id:'1',gameProjection:''},{id:'2',gameProjection:'40'}],[{id:'1',gameProjection:null},{id:'2',gameProjection:'40'}]])assert.equal(analyze({...forecastReport,predictor:{homeTeam:pair[0],awayTeam:pair[1]}},forecastEvent,'nfl',forecastMeta).predictor,null,'Invalid/mismatched predictor pair rejected');
+for(const fetchedAt of [now-300001,now+1,null])assert.equal(analyze(forecastReport,forecastEvent,'nfl',{...forecastMeta,fetchedAt}).predictor,null,'Stale/future/unknown report cannot be presented as fresh pregame estimate');
+assert.equal(analyze(forecastReport,event,'nfl',forecastMeta).predictor,null,'Pregame predictor withheld during live play');assert.equal(analyze(forecastReport,completed,'nfl',forecastMeta).predictor,null,'Pregame predictor withheld after game');assert.equal(analyze({...forecastReport,header:{}},forecastEvent,'nfl',forecastMeta).predictor,null,'Predictor needs explicit source event identity');
+const rounding=analyze({...forecastReport,predictor:{homeTeam:{id:'1',gameProjection:'87'},awayTeam:{id:'2',gameProjection:'12.9'}}},forecastEvent,'nfl',forecastMeta);assert.equal(rounding.predictor.homePercentage,87);assert.equal(rounding.predictor.awayPercentage,12.9,'Rounded source percentages are not rescaled');
+for(const extra of [{tieProbability:1},{drawChance:1},{tieTeam:{gameProjection:'1'}}])assert.equal(analyze({...forecastReport,predictor:{...forecastReport.predictor,...extra}},forecastEvent,'nfl',forecastMeta).predictor,null,'Two-way display cannot omit a separately published positive tie/draw outcome');
+let predictorCount=0;const predictorCoverage={};
+for(const sport of ['nfl','college','nba','mlb']){
+ predictorCoverage[sport]=0;
+ for(const game of savedSources.sports[sport].events){const saved=savedSources.reports?.[sport+':'+game.id];if(!saved?.report?.predictor)continue;
+  const instant=Date.parse(saved.collected_at),actual=analyze(saved.report,game,sport,{fetchedAt:saved.collected_at,now:instant});
+  assert(actual.predictor,'Real-source predictor is shown only with valid role IDs/percentages at its observed retrieval instant');assert.equal(actual.predictor.homePercentage,Number(saved.report.predictor.homeTeam.gameProjection));assert.equal(actual.predictor.awayPercentage,Number(saved.report.predictor.awayTeam.gameProjection));assert(actual.recommendation.startsWith('PASS'));assert.equal(actual.predictor.sourceTime,null);predictorCount++;predictorCoverage[sport]++;
+ }
+ assert(predictorCoverage[sport]>0,'Actual published predictor coverage exists for '+sport);
+}
+assert(predictorCount>=9,'Nine actual saved published predictor reports checked');console.log('Real-source published predictor coverage:',JSON.stringify(predictorCoverage));
 dom.window.close();console.log('PASS: intelligence four sports; source facts vs estimates; same-provider odds arithmetic; missing/stale/future/wrong-event quote guards; conservative PASS; scoring/lineup integrity and escaping.');

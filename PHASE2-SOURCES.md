@@ -54,3 +54,7 @@ The scheduled collector now requests the official MLB StatsAPI for at most two l
 On official-source failure, the prior successful check timestamp is preserved, `stale:true` and error/attempt time are added. Other league collection continues. Seven automated enrichment/crosscheck tests pass, including exact mapping, wrong team rejection, ambiguous doubleheader rejection and failure freshness. Detailed official crosschecks for NFL, college and NBA remain manually scoped to the fields in the table above; no automatic cross-league verification is implied.
 
 To keep mobile snapshots bounded, roster groups retain at most 40 players each, source starter/active flags and statistics, with athlete identity/jersey/position. Large unrelated athlete hot-zone payloads are omitted.
+
+## Published ESPN matchup estimates
+
+The actual enriched snapshot contains `predictor` fields for nine upcoming reports across all four sports: NFL1, college4, NBA3, MLB1. The application displays the source percentages verbatim only for a fresh, exact event/home/away-matched pregame report with valid 0–100 paired values and bounded rounding difference. Examples: WSH–SF away12.9/home87.0; BOS–DET47.9/52.1; CLE–TB44.5/55.5. These are ESPN published Matchup Predictor estimates, not independently validated probabilities, local forecasts, current live win probabilities or demonstrated betting edges. Source model update time and out-of-sample calibration are not supplied. The original ESPN summary URLs are stored with each report.

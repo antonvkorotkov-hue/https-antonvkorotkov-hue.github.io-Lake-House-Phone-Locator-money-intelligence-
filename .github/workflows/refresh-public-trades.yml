@@ -6,8 +6,6 @@ on:
       - 'scripts/collect_public.py'
       - 'scripts/collect_scores.py'
       - 'scripts/collect_splits.py'
-      - 'index.html'
-      - '.github/workflows/refresh-public-trades.yml'
   schedule:
     - cron: '*/10 * * * *'
 concurrency:

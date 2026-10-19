@@ -20,7 +20,7 @@ const path=require('node:path');
  await page.route('https://**/*',async route=>{const url=route.request().url();const sport=url.includes('/college-football/')?'college':url.includes('/nba/')?'nba':url.includes('/mlb/')?'mlb':'nfl';if(url.includes('/scoreboard'))return route.fulfill({json:{events:snapshot.sports[sport].events}});if(url.includes('/summary?')){
  const eventId=new URL(url).searchParams.get('event'),event=snapshot.sports[sport].events.find(e=>String(e.id)===eventId);
  const teams=event?.competitions?.[0]?.competitors||[];
- return route.fulfill({json:{header:{id:eventId},gameInfo:{venue:{fullName:'QA Fixture Stadium'},weather:{displayValue:'Clear',temperature:60,temperatureUnit:'F'}},boxscore:{teams:teams.map((c,i)=>({team:c.team,statistics:[{name:'totalYards',label:'Total yards',displayValue:String(122+122*i)},{name:'points',label:'Points',displayValue:String(10+10*i)}]})),players:teams.map(c=>({team:c.team,statistics:[{name:'passing',text:'Passing',labels:['C/ATT','YDS'],athletes:[{athlete:{displayName:'QA Fixture Player'},stats:['11/22','122']}]}]}))},injuries:teams.slice(0,1).map(c=>({team:c.team,injuries:[{athlete:{displayName:'QA Fixture Availability'},status:'Questionable',details:{type:'Knee'}}]})),leaders:[]}});
+ return route.fulfill({json:{header:{id:eventId},predictor:{header:'Matchup Predictor',homeTeam:{id:teams.find(c=>c.homeAway==='home')?.team?.id,gameProjection:'60'},awayTeam:{id:teams.find(c=>c.homeAway==='away')?.team?.id,gameProjection:'40'}},gameInfo:{venue:{fullName:'QA Fixture Stadium'},weather:{displayValue:'Clear',temperature:60,temperatureUnit:'F'}},boxscore:{teams:teams.map((c,i)=>({team:c.team,statistics:[{name:'totalYards',label:'Total yards',displayValue:String(122+122*i)},{name:'points',label:'Points',displayValue:String(10+10*i)}]})),players:teams.map(c=>({team:c.team,statistics:[{name:'passing',text:'Passing',labels:['C/ATT','YDS'],athletes:[{athlete:{displayName:'QA Fixture Player'},stats:['11/22','122']}]}]}))},injuries:teams.slice(0,1).map(c=>({team:c.team,injuries:[{athlete:{displayName:'QA Fixture Availability'},status:'Questionable',details:{type:'Knee'}}]})),leaders:[]}});
  }return route.fulfill({json:{events:[],markets:[]}})});
  await page.goto('http://127.0.0.1:'+server.address().port);await page.waitForFunction(()=>document.querySelector('#lh-v2-event option')?.value.startsWith('e:'));
  for(const width of [375,390,430]){
@@ -31,7 +31,14 @@ const path=require('node:path');
  for(const tab of ['games','money','scores','more']){
  await page.click('.mobile-bottom [data-screen="'+tab+'"]');
  const id={money:'trades',games:'games',scores:'scores',more:'more'}[tab];assert(await page.locator('#lh-v2-'+id).isVisible(),sport+' '+tab+' visible');
- if(tab==='games'||tab==='scores')assert(await page.locator('#lh-v2-'+id+' .lh-i-panel').isVisible(),sport+' intelligence is visible on '+tab);
+ if(tab==='games'||tab==='scores'){
+ assert(await page.locator('#lh-v2-'+id+' .lh-i-panel').isVisible(),sport+' intelligence is visible on '+tab);
+ const selectedId=(await page.locator('#lh-v2-event').inputValue()).slice(2),selectedGame=snapshot.sports[sport].events.find(e=>String(e.id)===selectedId);
+ if((selectedGame?.competitions?.[0]?.status||selectedGame?.status)?.type?.state==='pre'){
+ await page.waitForFunction(screenId=>document.querySelector('#lh-v2-'+screenId+' .lh-i-panel')?.textContent.includes('Published likely outcome'),id);
+ const forecast=await page.locator('#lh-v2-'+id+' .lh-i-panel p').filter({hasText:'Published likely outcome:'}).innerText();assert(forecast.includes('60%')&&forecast.includes('40%'),'Source predictor percentages visible at '+width+'px '+sport+' '+tab);
+ }
+ }
  if(tab==='games'||tab==='money')for(const market of ['winner','spread','total','team','half','props']){
  const button=page.locator('#lh-v2-'+id+' [data-lh-market="'+market+'"]');
  assert.equal(await button.count(),1,'Each supported market has a selector');await button.click();
@@ -56,6 +63,8 @@ const path=require('node:path');
  if(width===390){if(tab==='games'||tab==='money')await page.locator('#lh-v2-'+id+' [data-lh-market="winner"]').click();await page.screenshot({path:path.join(evidenceDir,sport+'-'+tab+'-390.png'),fullPage:true});}
  assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'No horizontal overflow at '+width+' '+sport+' '+tab);
  }
+ }
+ }
  // Exercise every scoreboard selection and assert it controls the rendered game.
  await page.setViewportSize({width:390,height:844});await page.click('.mobile-bottom [data-screen="games"]');
  for(const sport of ['nfl','college','nba','mlb']){
@@ -64,8 +73,6 @@ const path=require('node:path');
  await page.selectOption('#lh-v2-event','e:'+event.id);
  const competitors=event.competitions?.[0]?.competitors||[];
  for(const team of competitors)assert((await page.locator('#lh-v2-games .lh-v2-hero').innerText()).includes(team.team.abbreviation),sport+' selected '+event.id+' correct team '+team.team.abbreviation);
- }
- }
  }
  }
  assert.deepEqual(errors,[],'No uncaught page errors');

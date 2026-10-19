@@ -1,6 +1,6 @@
 # Lake House Picks — Phase 2 live intelligence acceptance
 
-Release ID: 2026-10-19-phase2. Existing repository preserved. Remote was checked before edits: dde38898bc9b7e6edb7fdf9e4fb98bf1b55a372c, following verified application 5f57cc0fe6. No replacement application was created.
+Release ID: 2026-10-19-phase2.1. Existing repository preserved. Remote was checked before edits: dde38898bc9b7e6edb7fdf9e4fb98bf1b55a372c, following verified application 5f57cc0fe6. No replacement application was created.
 
 PASS describes the implemented, tested behavior. BLOCKED identifies unavailable corroboration, access, inputs or predictive validation. A safe PASS recommendation is not a claim an unavailable data feed exists. This release must not be described as fully operational across every requested external feed or as an independently validated betting-prediction system.
 
@@ -39,16 +39,16 @@ PASS describes the implemented, tested behavior. BLOCKED identifies unavailable 
 | Team-comparison graphs | PASS | Same-unit, zero-baseline comparisons of supplied fields; raw values and scope accessible in source detail. Pregame placeholders do not become game-performance evidence. |
 | Verified market-activity graphs | PASS | Sampled premium and contract count with timestamps and sample limits; absent buckets unobserved, not zero market volume. |
 | 5. Recommendation / market assessment engine | PASS | Compares evidence availability across markets and returns PASS without justified independent value. Main risks and confidence limits explicit; existence of a market does not trigger a bet. |
-| Most likely outcome | PASS | When valid paired same-provider prices exist, displays the descriptive no-vig bookmaker-implied likely side; never labels it an independent model prediction or calibrated true probability. |
-| Projected score / scoring range | BLOCKED | No independently validated predictive model or calibrated range. Where appropriate, same-provider spread+total arithmetic is shown as a quoted market-implied full-game score, never added to a live score or presented as our forecast. |
+| Most likely outcome | PASS | Fresh, game/home/away-matched ESPN Matchup Predictor percentages shown verbatim as a published pregame estimate when supplied. Paired same-provider prices separately show bookmaker-implied likely side. Agreement is descriptive, not an independent edge; no live reinterpretation or claimed calibration. |
+| Projected score / scoring range | BLOCKED | No locally validated score-prediction model or calibrated range. Where appropriate, same-provider spread+total arithmetic is shown as a quoted market-implied full-game score, never added to a live score or presented as our forecast. |
 | Recommendation predictive confidence / profitable edge | BLOCKED | No trained/backtested/calibrated edge model is configured. Evidence quality is not a fabricated probability of winning. |
 | 6. Games / Trades / Scores / More | PASS | Four navigation screens preserve selections, source/error states and scoped research. Maria appears on Games/Scores; detailed source statistics expand separately. |
 | All sports / six selectors / multiple real matchups | PASS | Deterministic and actual saved-report integration checks across all sports and category controls; exact mapping, wrong-game/provider/period rejection. |
 | Freshness / automatic reports / manual refresh | PASS | Source generation guards; game summaries now refresh after 60 seconds without requiring manual force; stale/error/dated fallback and independent-check failure states tested. |
 | Research / storage regression | PASS | Existing safe game-scoped evidence, imports, exports, conflict/quota/corrupt-store protection preserved. User entries remain unverified. |
-| Safari-engine iPhone viewport QA | PASS | Theo full integrated 375/390/430px WebKit run passed; twelve saved reports, all six market controls, four views and real-render inspection passed. Root inspected compact phone screens and completed NFL scoring timelines. Physical iPhone certification remains unavailable. |
-| 7. Deployment / served assets | FAIL | Final release commit, Actions checks and fifteen runtime/report asset matches pending. No final release claim until verified. |
-| Scheduled refresh | PASS | Existing ten-minute best-effort workflow preserved; enriched report and official MLB crosscheck collectors locally verified. Final deployed workflow run will be recorded with release evidence. |
+| Safari-engine iPhone viewport QA | PASS | Theo corrected integrated 375/390/430px WebKit run passed; twelve saved reports, all six market controls, four views and real-render inspection passed. Root inspected compact phone screens and completed NFL scoring timelines. Physical iPhone certification remains unavailable. |
+| 7. Deployment / served assets | PASS | Initial Phase 2 implementation 3521fea05e passed Actions 39335033620 including all suites, mobile checks and fifteen served asset hashes. Final clock/cache follow-up is accepted only after the same required gate passes; exact final commit and gate are in the delivery message. |
+| Scheduled refresh | PASS | Existing ten-minute best-effort workflow preserved; enriched report and official MLB crosscheck collectors locally verified. Deployed collector run 39335033631 passed and pushed 40b6542ab9 with four sports/twelve reports and no reported collection errors. |
 
 ## Evidence
 
@@ -56,10 +56,14 @@ PHASE2-SOURCES.md documents primary URLs, actual selected games and field-specif
 
 PHASE2-QA.md records Theo's independent checks. PHASE2-REVIEW.md records Rimma's review and release conditions. SOURCE-AUDIT.md retains public source access and sampling evidence. Existing Phase 1 QA evidence remains in QA-EVIDENCE.md.
 
+The earlier enhanced mobile harness reset its viewport during a nested matchup sweep, so its full-width coverage claim was overstated. The corrected suite keeps every sport/screen at each requested width, then runs one separate all-matchup sweep. Theo reran it successfully; this corrected run supersedes the earlier coverage claim.
+
 Automated suites: test_visual.cjs, test_analytics.cjs, test_intelligence.cjs, test_charts.cjs, test_failure_states.cjs, test_research.cjs, test_splits_ui.cjs, test_mobile.cjs, test_collectors.py, test_source_enrichment.py, test_data_integrity.py, test_publish.py and test_splits.py. inspect_rendered.cjs exercises actual saved reports and rendered screens, not live-feed or physical-device certification.
 
 ## External dependencies and delivery boundary
 
-ESPN can omit stats, injuries, weather, starters or sportsbook prices; its published closing/latest quote has no universal source-update timestamp. Direct authorized DraftKings/FanDuel feeds are not configured. Limited public VSiN preview and genuine Kalshi samples are clearly distinct. Full market coverage and independently calibrated forecasting remain BLOCKED rather than disguised as supported facts.
+ESPN can omit stats, injuries, weather, starters or sportsbook prices; its published closing/latest quote has no universal source-update timestamp. Direct authorized DraftKings/FanDuel feeds are not configured. Limited public VSiN preview and genuine Kalshi samples are clearly distinct. Full market coverage and locally calibrated score/edge forecasting remain BLOCKED rather than disguised as supported facts. Published ESPN matchup percentages remain attributed estimates, not proof of outcome accuracy or profitability.
 
-Release evidence will be recorded after the final deployment gate. The delivery message supplies the exact release and data commit, live link and final Actions result.
+Implementation: 3521fea05e2e11a3b69cb0f3429e34a073c7de4d. Refreshed data: 40b6542ab9c0eaddcc73b232c139f3d53f02d99d (292 exchange contracts / 7,394 sampled trades; no completeness claim). Initial verify/deploy Actions run: 39335033620. Collector Actions run: 39335033631. An unmocked public WebKit run exercised all four sports, six market controls and four navigation screens with zero request failures or uncaught errors at the observed test time.
+
+The final source-model/clock/cache follow-up validates ESPN published pregame model percentages against exact game and home/away team identities, rejects stale/future/live contexts and malformed probability pairs, and keeps the model distinct from bookmaker estimates and recommendations. It hides pregame/postgame/baseball clock placeholders, retains actual live timed-game clocks and versions assets to prevent stale scripts. Its regression tests passed locally. Delivery is conditional on that follow-up passing the complete Actions and fifteen-asset publication gate. The delivery message records the exact final release commit and final gate result. Frontend/cache and documentation changes do not start redundant upstream collection; scheduled/manual/collector-code refreshes remain enabled.

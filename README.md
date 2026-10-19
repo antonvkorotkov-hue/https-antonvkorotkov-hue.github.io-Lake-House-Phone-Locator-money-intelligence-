@@ -39,3 +39,7 @@ Scheduled summaries retain bounded plays/scoring/drives, source rosters and hist
 Phase 2 evidence: [acceptance](ACCEPTANCE.md), [official-source field audit](PHASE2-SOURCES.md), [Theo QA](PHASE2-QA.md), [Rimma review](PHASE2-REVIEW.md). Source audit limitations remain binding; no universal independent validation of every field or current sportsbook offer is asserted.
 
 Additional checks: `node scripts/test_intelligence.cjs`, `python scripts/test_source_enrichment.py`, `node scripts/inspect_rendered.cjs`. The publisher checks fifteen deployed runtime/report assets, including the new intelligence JavaScript and CSS. Real snapshot tests are source-recording integration tests, distinct from live upstream or physical-iPhone certification.
+
+Data refresh still runs on its ten-minute requested schedule, manual dispatch, or collector-code changes. Frontend/cache-version and documentation edits do not start redundant upstream collection.
+
+Fresh ESPN `predictor` matchup percentages are displayed verbatim only with exact event/home/away identity, valid paired probabilities and pregame scope. Source update time and local calibration are unknown; these are published ESPN estimates, distinct from bookmaker-implied prices, our own score forecasts, live win probability and actionable value. Agreement may involve overlapping inputs and never establishes an independent edge.
