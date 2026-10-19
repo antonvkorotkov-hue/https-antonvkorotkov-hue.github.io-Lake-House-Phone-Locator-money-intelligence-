@@ -12,7 +12,7 @@ const insertion=$('lhVisualHero')||$('gameMoney')||$('scoreboardSection');if(!in
 insertion.parentNode.insertBefore(root,insertion);
 document.body.classList.add('lh-v2');
 const leagueTicker={nfl:['KXNFL'],college:['KXCFB'],nba:['KXNBA'],mlb:['KXMLB']};
-const marketLabel={winner:'Winner / moneyline',spread:'Spread / margin contracts',total:'Game total thresholds',team:'Team total O/U',half:'First-half markets',props:'Player props'};
+const marketLabel={winner:'Winner / moneyline',spread:'Alternative winning margins (not sportsbook spread)',total:'Exchange total thresholds (not O/U odds)',team:'Team total O/U',half:'First-half markets',props:'Player props'};
 function leagueFor(m){return (leagueTicker[state.sport]||[]).some(prefix=>String(m.series||'').startsWith(prefix))}
 function shortName(event){return event?.shortName||event?.name||event?.id||'Matchup'}
 function participants(event){const teams=event?.competitions?.[0]?.competitors||[];return {away:teams.find(t=>t.homeAway==='away')||teams[0],home:teams.find(t=>t.homeAway==='home')||teams[1]}}
@@ -42,11 +42,13 @@ function marketTabs(){return '<div class="lh-v2-market-tabs" role="group" aria-l
 function relevantSeries(m){const ser=String(m.series||'');return state.market==='winner'?(ser.includes('GAME')):state.market==='spread'?(ser.includes('SPREAD')):state.market==='total'?(ser.includes('TOTAL')):false}
 function tradesForMarkets(ms){return ms.flatMap(m=>(m.trades||[]).map(t=>({t,m}))).filter(x=>Number.isFinite(Number(x.t.premium_usd))&&Number(x.t.premium_usd)>=0)}
 function spark(ms){
- const trades=tradesForMarkets(ms).sort((a,b)=>Date.parse(a.t.time)-Date.parse(b.t.time));
- if(trades.length<2)return '<div class="lh-v2-nochart">Not enough recorded trades to plot a history.</div>';
- const n=trades.length,observed=trades.reduce((x,r)=>x+Number(r.t.premium_usd),0);
- let run=0;const points=trades.map((r,i)=>{run+=Number(r.t.premium_usd);return (18+680*i/(n-1)).toFixed(1)+','+(177-151*run/Math.max(1,observed)).toFixed(1)}).join(' ');
- return '<svg class="lh-v2-line" viewBox="0 0 720 204" role="img" aria-label="Cumulative sampled traded premium over time"><path d="M18 177H698M18 101H698M18 25H698" stroke="#264c66" stroke-width="1" fill="none"/><polyline points="'+points+'" fill="none" stroke="#39bfff" stroke-width="4" stroke-linejoin="round" stroke-linecap="round"/></svg><div class="lh-v2-axis"><span>'+esc(new Date(trades[0].t.time).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</span><span>'+esc(new Date(trades[n-1].t.time).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</span></div>';
+ const trades=tradesForMarkets(ms).filter(x=>Number.isFinite(Date.parse(x.t.time))).sort((a,b)=>Date.parse(a.t.time)-Date.parse(b.t.time));
+ if(trades.length<2)return '<div class="lh-v2-nochart">Not enough recorded exchange trades to chart the observed intervals.</div>';
+ const start=Date.parse(trades[0].t.time),end=Date.parse(trades[trades.length-1].t.time),buckets=Array.from({length:18},()=>0);
+ for(const x of trades){const n=Math.min(17,Math.floor(18*(Date.parse(x.t.time)-start)/Math.max(1,end-start+1)));buckets[n]+=Number(x.t.premium_usd)}
+ const top=Math.max(1,...buckets);
+ const bars=buckets.map((v,i)=>'<rect x="'+(20+i*38)+'" y="'+(181-148*v/top).toFixed(1)+'" width="26" height="'+(148*v/top).toFixed(1)+'" rx="3" fill="#34baf5"></rect>').join('');
+ return '<svg class="lh-v2-line" viewBox="0 0 720 204" role="img" aria-label="Observed exchange trade premium in 18 chronological time intervals"><path d="M18 181H706M18 106H706M18 33H706" stroke="#264c66" stroke-width="1" fill="none"/>'+bars+'</svg><div class="lh-v2-axis"><span>'+esc(new Date(start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</span><span>'+esc(new Date(end).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</span></div>';
 }
 function tradeStats(ms){
  const t=tradesForMarkets(ms),sum=t.reduce((n,x)=>n+Number(x.t.premium_usd),0);
@@ -70,7 +72,7 @@ function tradePanel(){
  const all=selectedMarkets(),subset=all.filter(relevantSeries);
  const collected=state.collected?new Date(state.collected):null,stale=!collected||Date.now()-collected.getTime()>1800000;
  if(['team','half','props'].includes(state.market))return '<article class="lh-v2-panel lh-v2-unavailable"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>DATA NOT CONNECTED</small></div><p>There is no verified market feed for this category. Showing zero transactions would be misleading.</p><p class="lh-v2-note">Choose Moneyline, Spread, or Total for observed exchange contracts. No team-total or player-prop odds are invented.</p></article>';
- return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>'+(stale?'STALE SNAPSHOT':'Kalshi public trades')+'</small></div>'+(subset.length?tradeStats(subset)+'<h3 class="lh-v2-chart-title">Cumulative sampled traded premium</h3>'+spark(subset):'<div class="lh-v2-nochart">No recorded '+esc(marketLabel[state.market].toLowerCase())+' contracts for this matchup in the current sample.</div>')+'<p class="lh-v2-note">'+esc(state.tradeError||'Sampled exchange premium, not sportsbook betting handle. Spread contracts are winning margins, and total contracts are individual thresholds.')+'</p></article>';
+ return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>'+(stale?'STALE SNAPSHOT':'Kalshi public trades')+'</small></div>'+(subset.length?tradeStats(subset)+'<h3 class="lh-v2-chart-title">Recorded trade premium by time interval</h3>'+spark(subset):'<div class="lh-v2-nochart">No recorded '+esc(marketLabel[state.market].toLowerCase())+' contracts for this matchup in the current sample.</div>')+'<p class="lh-v2-note">'+esc(state.tradeError||'Sampled exchange premium, not sportsbook betting handle. Spread contracts are winning margins, and total contracts are individual thresholds.')+'</p></article>';
 }
 function analysis(){
  const ms=selectedMarkets(),num=tradesForMarkets(ms).length,quote=selectedEvent()?.competitions?.[0]?.odds?.[0];
