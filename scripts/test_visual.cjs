@@ -1,3 +1,4 @@
+setTimeout(()=>{console.error('Visual QA timed out');process.exit(2)},10000).unref();
 const fs=require('node:fs');
 const assert=require('node:assert/strict');
 const {JSDOM}=require('jsdom');
@@ -40,4 +41,4 @@ await new Promise(resolve=>setTimeout(resolve,150));
 assert.equal(sport.getAttribute('aria-pressed'),'true','Sport button updates');
 w.close();
 console.log('PASS: game cards, odds, missing markets, trade graph, team stats, score view, tabs, sports.');
-})().catch(e=>{console.error(e);process.exitCode=1});
+})().catch(e=>{console.error(e);process.exit(1)});
