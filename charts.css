@@ -2,3 +2,5 @@
 .lh-c-contract{fill:#99b8ff}
 
 @media(max-width:700px){.lh-c-svg text{font-size:22px}}
+
+.lh-c-headline{display:flex;flex-wrap:wrap;align-items:center;gap:7px 10px;padding:10px 0 2px;color:#afcddd;font-size:.72rem}.lh-c-headline strong{font-size:1.15rem;color:#f0fbff}.lh-c-movement{font-size:.86rem!important;color:#65dfd1!important;margin:3px 0 8px}.lh-c-metadata{border-top:1px solid #2c4560;margin:6px 0}.lh-c-metadata summary{color:#a4cbdf;cursor:pointer;padding:7px 0;font-size:.78rem;min-height:34px}.lh-c-panel .lh-c-svg{max-height:220px}.lh-c-panel .lh-c-svg text{font-size:13px}@media(max-width:700px){.lh-c-panel .lh-c-svg text{font-size:13px}.lh-c-panel{padding:12px}}
