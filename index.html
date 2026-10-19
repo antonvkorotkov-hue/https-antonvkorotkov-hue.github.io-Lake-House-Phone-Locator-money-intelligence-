@@ -96,7 +96,7 @@ function renderTrend(){
  const entries=data.filter(x=>x.market===market&&x.received).sort((a,b)=>Date.parse(a.received)-Date.parse(b.received));
  const choices=[...new Set(entries.map(x=>x.side).filter(Boolean))],selected=sideEl.value;
  sideEl.innerHTML='<option value="">Latest recorded selection</option>'+choices.map((v,i)=>'<option value="'+i+'">'+v.replace(/&/g,'&amp;').replace(/</g,'&lt;')+'</option>').join('');
- if(choices.includes(selected))sideEl.value=String(choices.indexOf(selected)); // selected is index after prior render
+ if(selected!==''&&Number.isInteger(Number(selected))&&Number(selected)>=0&&Number(selected)<choices.length)sideEl.value=selected;
  const chosen=sideEl.value===''?entries.at(-1)?.side:choices[Number(sideEl.value)];
  const points=entries.filter(x=>x.side===chosen&&(x.line!=null||x.odds!=null));
  const svg=document.getElementById('trendSVG'),status=document.getElementById('trendStatus');
