@@ -20,23 +20,21 @@ if site.get('build_type') != 'legacy':
     raise RuntimeError('Expected existing branch-based Pages publishing; configuration changed')
 base = site['html_url'].rstrip('/') + '/'
 # Requests a normal branch build; no competing custom Pages deployment is created.
-build = api('/pages/builds', 'POST')
-build_path = build['url'].removeprefix(API)
-for attempt in range(120):
-    status = api(build_path)
-    if status.get('status') == 'built':
-        break
-    if status.get('status') == 'errored':
-        raise RuntimeError('Pages build failed: '+str(status.get('error')))
-    time.sleep(3)
-else:
-    raise RuntimeError('Pages build did not finish within six minutes')
+api('/pages/builds', 'POST')
+# Served file hashes are the deployment gate; legacy build records may lag or
+# return 404 while GitHub routes the request through its managed Actions job.
 
 for name in ['index.html','visual.js','visual.css','scoreboards.json','public-trades.json']:
     expected = hashlib.sha256(Path(name).read_bytes()).hexdigest()
     for attempt in range(8):
-        with urllib.request.urlopen(base+name+'?verify='+str(time.time_ns()),timeout=30) as response:
-            actual = hashlib.sha256(response.read()).hexdigest()
+        try:
+            with urllib.request.urlopen(base+name+'?verify='+str(time.time_ns()),timeout=30) as response:
+                actual = hashlib.sha256(response.read()).hexdigest()
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (404, 502, 503) or attempt == 7:
+                raise
+            time.sleep(10)
+            continue
         if actual == expected:
             print('Verified served asset:', name)
             break

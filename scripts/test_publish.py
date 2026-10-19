@@ -1,4 +1,4 @@
-import io,json,os,runpy,tempfile,unittest
+import io,json,os,runpy,tempfile,unittest,urllib.error
 from pathlib import Path
 from unittest.mock import patch
 SCRIPT=Path(__file__).with_name('publish_pages.py').resolve()
@@ -19,9 +19,9 @@ class PublishTest(unittest.TestCase):
                     if url.startswith('https://example.test/'):return Response(b'verified')
                     if url.endswith('/pages'):data={'build_type':'legacy','html_url':'https://example.test/'}
                     elif url.endswith('/pages/builds'):data={'url':'https://api.github.com/repos/test/app/pages/builds/1'}
-                    else:data={'status':'built'}
+                    else:raise AssertionError('Unexpected build-status dependency: '+url)
                     return Response(json.dumps(data).encode())
-                with patch.dict(os.environ,{'GITHUB_REPOSITORY':'test/app','GH_TOKEN':'test'}),patch('urllib.request.urlopen',request):runpy.run_path(str(SCRIPT))
+                with patch.dict(os.environ,{'GITHUB_REPOSITORY':'test/app','GH_TOKEN':'test'}),patch('urllib.request.urlopen',request),patch('time.sleep'):runpy.run_path(str(SCRIPT))
                 self.assertIn(('POST','https://api.github.com/repos/test/app/pages/builds'),calls)
                 self.assertFalse(any('/deployments' in url for _,url in calls),'Never create competing Pages deployments')
                 self.assertEqual(sum(url.startswith('https://example.test/')for _,url in calls),5)
