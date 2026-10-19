@@ -44,3 +44,23 @@ jobs:
           path: _site
       - uses: actions/deploy-pages@v4
         id: deployment
+      - name: Verify served deployment assets
+        env:
+          PAGE_URL: ${{ steps.deployment.outputs.page_url }}
+        run: |
+          python - <<'PYCODE'
+          import hashlib, os, time, urllib.request
+          from pathlib import Path
+          base = os.environ['PAGE_URL'].rstrip('/') + '/'
+          for name in ['index.html', 'visual.js', 'visual.css', 'scoreboards.json', 'public-trades.json']:
+              expected = hashlib.sha256(Path(name).read_bytes()).hexdigest()
+              for attempt in range(6):
+                  with urllib.request.urlopen(base + name + '?verify=' + str(time.time_ns()), timeout=30) as response:
+                      actual = hashlib.sha256(response.read()).hexdigest()
+                  if actual == expected:
+                      print('Verified served asset:', name)
+                      break
+                  if attempt == 5:
+                      raise RuntimeError('Served asset differs from deployment: ' + name)
+                  time.sleep(10)
+          PYCODE
