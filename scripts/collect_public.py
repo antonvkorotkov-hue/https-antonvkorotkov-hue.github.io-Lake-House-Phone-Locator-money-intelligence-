@@ -3,6 +3,8 @@ import datetime as dt
 import json
 import urllib.parse
 import urllib.request
+import urllib.error
+import time
 from pathlib import Path
 
 BASE = "https://api.elections.kalshi.com/trade-api/v2"
@@ -12,8 +14,15 @@ def request(path, params):
     query = urllib.parse.urlencode(params)
     req = urllib.request.Request(BASE + path + "?" + query,
                                  headers={"Accept":"application/json","User-Agent":"LakeHousePicks-public-research/1.0"})
-    with urllib.request.urlopen(req, timeout=15) as response:
-        return json.load(response)
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=20) as response:
+                return json.load(response)
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 or attempt == 3:
+                raise
+            time.sleep(2 ** attempt * 3)
+    raise RuntimeError('Request retries exhausted')
 
 now = dt.datetime.now(UTC).isoformat()
 results = []
@@ -27,6 +36,7 @@ for series in SERIES:
             if not ticker:
                 continue
             try:
+                time.sleep(0.6)
                 trades = request("/markets/trades",{"ticker":ticker,"limit":100}).get("trades",[])
                 sample = []
                 for trade in trades:
