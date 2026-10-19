@@ -69,7 +69,8 @@ function priceBoard(){
 function tradePanel(){
  const all=selectedMarkets(),subset=all.filter(relevantSeries);
  const collected=state.collected?new Date(state.collected):null,stale=!collected||Date.now()-collected.getTime()>1800000;
- return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>'+(stale?'STALE / NO FEED':'Kalshi public trades')+'</small></div>'+tradeStats(subset)+'<h3 class="lh-v2-chart-title">Cumulative sampled traded premium</h3>'+spark(subset)+'<p class="lh-v2-note">'+esc(state.tradeError||'Only observed trades are shown. Trade premium is not total sportsbook handle or proof of money favoring a team.')+'</p></article>';
+ if(['team','half','props'].includes(state.market))return '<article class="lh-v2-panel lh-v2-unavailable"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>DATA NOT CONNECTED</small></div><p>There is no verified market feed for this category. Showing zero transactions would be misleading.</p><p class="lh-v2-note">Choose Moneyline, Spread, or Total for observed exchange contracts. No team-total or player-prop odds are invented.</p></article>';
+ return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>'+(stale?'STALE SNAPSHOT':'Kalshi public trades')+'</small></div>'+(subset.length?tradeStats(subset)+'<h3 class="lh-v2-chart-title">Cumulative sampled traded premium</h3>'+spark(subset):'<div class="lh-v2-nochart">No recorded '+esc(marketLabel[state.market].toLowerCase())+' contracts for this matchup in the current sample.</div>')+'<p class="lh-v2-note">'+esc(state.tradeError||'Sampled exchange premium, not sportsbook betting handle. Spread contracts are winning margins, and total contracts are individual thresholds.')+'</p></article>';
 }
 function analysis(){
  const ms=selectedMarkets(),num=tradesForMarkets(ms).length,quote=selectedEvent()?.competitions?.[0]?.odds?.[0];
