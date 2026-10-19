@@ -42,13 +42,35 @@ function marketTabs(){return '<div class="lh-v2-market-tabs" role="group" aria-l
 function relevantSeries(m){const ser=String(m.series||'');return state.market==='winner'?(ser.includes('GAME')):state.market==='spread'?(ser.includes('SPREAD')):state.market==='total'?(ser.includes('TOTAL')):false}
 function tradesForMarkets(ms){return ms.flatMap(m=>(m.trades||[]).map(t=>({t,m}))).filter(x=>Number.isFinite(Number(x.t.premium_usd))&&Number(x.t.premium_usd)>=0)}
 function spark(ms){
- const trades=tradesForMarkets(ms).filter(x=>Number.isFinite(Date.parse(x.t.time))).sort((a,b)=>Date.parse(a.t.time)-Date.parse(b.t.time));
- if(trades.length<2)return '<div class="lh-v2-nochart">Not enough recorded exchange trades to chart the observed intervals.</div>';
- const start=Date.parse(trades[0].t.time),end=Date.parse(trades[trades.length-1].t.time),buckets=Array.from({length:18},()=>0);
- for(const x of trades){const n=Math.min(17,Math.floor(18*(Date.parse(x.t.time)-start)/Math.max(1,end-start+1)));buckets[n]+=Number(x.t.premium_usd)}
- const top=Math.max(1,...buckets);
- const bars=buckets.map((v,i)=>'<rect x="'+(20+i*38)+'" y="'+(181-148*v/top).toFixed(1)+'" width="26" height="'+(148*v/top).toFixed(1)+'" rx="3" fill="#34baf5"></rect>').join('');
- return '<svg class="lh-v2-line" viewBox="0 0 720 204" role="img" aria-label="Observed exchange trade premium in 18 chronological time intervals"><path d="M18 181H706M18 106H706M18 33H706" stroke="#264c66" stroke-width="1" fill="none"/>'+bars+'</svg><div class="lh-v2-axis"><span>'+esc(new Date(start).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</span><span>'+esc(new Date(end).toLocaleTimeString([],{hour:'numeric',minute:'2-digit'}))+'</span></div>';
+ const candidates=ms.map(m=>({m,items:(m.trades||[]).filter(t=>Date.parse(t.time)&&Number(t.contracts)>0&&Number.isFinite(Number(t.premium_usd))).sort((a,b)=>Date.parse(a.time)-Date.parse(b.time))})).sort((a,b)=>b.items.length-a.items.length);
+ const best=candidates[0];
+ if(!best||best.items.length<2)return '<div class="lh-v2-nochart">Not enough recorded trades to show price movement. No trend inferred.</div>';
+ const items=best.items;
+ const timeLabel=t=>new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+ const pct=t=>{const count=Number(t.contracts),premium=Number(t.premium_usd),p=premium/count;return Math.min(100,Math.max(0,(t.side==='no'?1-p:p)*100))};
+ const start=Date.parse(items[0].time),end=Date.parse(items[items.length-1].time);
+ const buckets=Array.from({length:18},()=>({premium:0,weighted:0,contracts:0,trades:0}));
+ for(const t of items){
+  const ts=Date.parse(t.time),i=Math.min(17,Math.floor(18*(ts-start)/Math.max(1,end-start+1)));
+  const c=Number(t.contracts);buckets[i].premium+=Number(t.premium_usd);
+  buckets[i].weighted+=pct(t)*c;buckets[i].contracts+=c;buckets[i].trades++;
+ }
+ const active=buckets.map((d,i)=>({...d,i,price:d.contracts?d.weighted/d.contracts:null})).filter(x=>x.trades);
+ if(active.length<2)return '<div class="lh-v2-nochart">All sampled transactions fall in one interval. Not enough timed observations to show a price trend.</div>';
+ const x=i=>54+i*35,y=p=>174-(p*1.35);
+ const points=active.map(d=>x(d.i).toFixed(1)+','+y(d.price).toFixed(1)).join(' ');
+ const dots=active.map(d=>'<circle cx="'+x(d.i)+'" cy="'+y(d.price).toFixed(1)+'" r="4" fill="#40d7ff"><title>'+esc('Bucket '+(d.i+1)+': '+d.price.toFixed(1)+'% implied YES price from sampled trades')+'</title></circle>').join('');
+ const grid=[0,25,50,75,100].map(v=>'<line x1="52" y1="'+y(v)+'" x2="655" y2="'+y(v)+'" stroke="#30516a" stroke-dasharray="3 5"/><text x="44" y="'+(y(v)+4)+'" text-anchor="end" fill="#afcde2" font-size="12">'+v+'%</text>').join('');
+ const max=Math.max(1,...buckets.map(d=>d.premium));
+ const bars=buckets.map((d,i)=>'<rect x="'+(54+i*35)+'" y="'+(147-118*d.premium/max).toFixed(1)+'" width="24" height="'+(118*d.premium/max).toFixed(1)+'" rx="3" fill="#39acfa"><title>'+esc('Bucket '+(i+1)+': $'+d.premium.toFixed(2)+' sampled premium from '+d.trades+' trades')+'</title></rect>').join('');
+ const first=active[0].price,last=active[active.length-1].price,delta=last-first;
+ return '<div class="lh-v2-chart-explain"><strong>'+esc(best.m.market||best.m.ticker)+'</strong><small>Most-sampled market only · '+items.length+' trades · sampled Kalshi transaction-derived YES prices, not sportsbook lines</small></div>'+
+ '<div class="lh-v2-chart-explain"><strong>First observed '+first.toFixed(1)+'% → last observed '+last.toFixed(1)+'%</strong><small>Change '+(delta>=0?'+':'')+delta.toFixed(1)+' percentage points · not a forecast</small></div>'+
+ '<h3 class="lh-v2-chart-title">Implied YES price over sampled time (0–100%)</h3>'+
+ '<svg class="lh-v2-line" viewBox="0 0 700 208" role="img" aria-label="Sampled implied YES price by time, with a zero to 100 percent vertical axis">'+grid+'<polyline points="'+points+'" fill="none" stroke="#40d7ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'<text x="54" y="200" fill="#afcde2" font-size="11">'+esc(timeLabel(start))+'</text><text x="655" y="200" text-anchor="end" fill="#afcde2" font-size="11">'+esc(timeLabel(end))+'</text></svg>'+
+ '<h3 class="lh-v2-chart-title">Sampled premium per time interval ($; NOT total handle)</h3>'+
+ '<svg class="lh-v2-line" viewBox="0 0 700 182" role="img" aria-label="Observed Kalshi trade premium in 18 chronological intervals in dollars"><line x1="52" x2="655" y1="147" y2="147" stroke="#afcde2"/><text x="50" y="20" text-anchor="end" fill="#afcde2" font-size="11">'+esc(money(max))+'</text><text x="50" y="148" text-anchor="end" fill="#afcde2" font-size="11">$0</text>'+bars+'<text x="54" y="174" fill="#afcde2" font-size="11">'+esc(timeLabel(start))+'</text><text x="655" y="174" text-anchor="end" fill="#afcde2" font-size="11">'+esc(timeLabel(end))+'</text></svg>'+
+ '<p class="lh-v2-note">Exchange YES price is calculated from observed contract premium divided by contracts (NO-side trades are inverted). Samples are incomplete; gaps are not zero volume. Each chart describes only the named market, not all sportsbook bets.</p>';
 }
 function tradeStats(ms){
  const t=tradesForMarkets(ms),sum=t.reduce((n,x)=>n+Number(x.t.premium_usd),0);
