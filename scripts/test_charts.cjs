@@ -13,6 +13,8 @@ const two=price({title:'Home moneyline',source:'Verified source',unit:'American 
 for(const text of ['Home moneyline','Verified source','First observed','Latest observed','First observed → latest change','Source opening → latest change','Opening timestamp unknown','Connecting segments','observations and timestamps','-120'])assert(two.includes(text),text);
 assert(two.includes('<polyline'),'Two distinct timestamps produce graph');
 assert(two.includes('-20 American quote units'),'Observed quote-number delta is latest minus first');
+assert(two.includes('Break-even probability:'),'American odds chart explains implied break-even probability');
+assert(two.includes('not our prediction'),'Break-even probability is explicitly not the model forecast');
 assert(two.includes('-10 American quote units'),'Source-opening delta is latest minus supplied opening');
 assert(two.includes('not a linear change in implied probability'),'American quote changes are not implied probability changes');
 const percentage=price({unit:'percent',points:[{time:t1,value:50},{time:t2,value:55}],opening:{value:40}});
