@@ -1,0 +1,46 @@
+name: Verify and deploy Lake House Picks
+on:
+  push:
+    branches: [main]
+    paths: ['index.html', 'visual.js', 'visual.css', 'scoreboards.json', 'public-trades.json', 'scripts/**', '.github/workflows/pages.yml']
+  workflow_run:
+    workflows: ['Refresh public sports trades']
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  verify-deploy:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: npm install --no-save --package-lock=false jsdom@26 playwright@1.61.1
+      - run: npx playwright install --with-deps webkit
+      - run: python scripts/test_collectors.py
+      - run: node --check visual.js && node scripts/test_visual.cjs
+      - run: WEBKIT=1 node scripts/test_mobile.cjs
+      - uses: actions/configure-pages@v5
+      - name: Prepare static files only
+        run: |
+          mkdir _site
+          cp index.html visual.js visual.css public-trades.json scoreboards.json _site/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - uses: actions/deploy-pages@v4
+        id: deployment

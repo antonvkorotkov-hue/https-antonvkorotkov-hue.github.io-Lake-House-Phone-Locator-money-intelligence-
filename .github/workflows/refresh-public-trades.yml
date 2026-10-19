@@ -4,28 +4,36 @@ on:
   push:
     paths:
       - 'scripts/collect_public.py'
+      - 'scripts/collect_scores.py'
       - 'index.html'
       - '.github/workflows/refresh-public-trades.yml'
   schedule:
     - cron: '*/10 * * * *'
+concurrency:
+  group: public-data-refresh
+  cancel-in-progress: false
 permissions:
   contents: write
 jobs:
   collect:
     runs-on: ubuntu-latest
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Read public scores and record published odds
+        run: python scripts/collect_scores.py
       - name: Read public market trades
         run: python scripts/collect_public.py
       - name: Publish only when updated
         run: |
           git config user.name "Lake House Data Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public-trades.json
+          git add public-trades.json scoreboards.json
           if ! git diff --cached --quiet; then
             git commit -m "Update verified public trade snapshot"
+            git pull --rebase origin main
             git push
           fi

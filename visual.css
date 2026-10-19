@@ -88,3 +88,9 @@ body.lh-v2 header .tag{font-size:10px;max-width:126px;text-align:center;padding:
 .lh-v2-panel{padding:12px}
 }
 @media(min-width:701px){body.lh-v2 .mobile-bottom{display:flex!important}.lh-v2-root{padding-bottom:100px}}
+
+/* Keep source names and market labels inside narrow iPhone cards. */
+.lh-v2-root,.lh-v2-panel,.lh-v2-hero,.lh-v2-odd{min-width:0;overflow-wrap:anywhere}
+.lh-v2-sports{overflow-x:auto}
+.lh-v2-sports button{flex:0 0 auto;min-height:44px}
+.lh-v2-market-tabs button{min-height:44px}
