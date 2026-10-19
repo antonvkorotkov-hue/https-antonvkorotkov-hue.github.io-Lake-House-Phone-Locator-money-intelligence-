@@ -1,0 +1,26 @@
+name: Refresh public sports trades
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '*/10 * * * *'
+permissions:
+  contents: write
+jobs:
+  collect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Read public market trades
+        run: python scripts/collect_public.py
+      - name: Publish only when updated
+        run: |
+          git config user.name "Lake House Data Bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add public-trades.json
+          if ! git diff --cached --quiet; then
+            git commit -m "Update verified public trade snapshot"
+            git push
+          fi
