@@ -31,6 +31,7 @@ const path=require('node:path');
  for(const tab of ['games','money','scores','more']){
  await page.click('.mobile-bottom [data-screen="'+tab+'"]');
  const id={money:'trades',games:'games',scores:'scores',more:'more'}[tab];assert(await page.locator('#lh-v2-'+id).isVisible(),sport+' '+tab+' visible');
+ if(tab==='games'||tab==='scores')assert(await page.locator('#lh-v2-'+id+' .lh-i-panel').isVisible(),sport+' intelligence is visible on '+tab);
  if(tab==='games'||tab==='money')for(const market of ['winner','spread','total','team','half','props']){
  const button=page.locator('#lh-v2-'+id+' [data-lh-market="'+market+'"]');
  assert.equal(await button.count(),1,'Each supported market has a selector');await button.click();

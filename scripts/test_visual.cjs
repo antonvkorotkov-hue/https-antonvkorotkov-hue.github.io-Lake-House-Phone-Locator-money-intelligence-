@@ -21,7 +21,7 @@ else throw new Error('Unexpected request: '+address);
 return {ok:true,json:async()=>data};
 };
 const original=fs.readFileSync('visual.js','utf8');
-for(const module of ['analytics.js','charts.js','research.js'])if(fs.existsSync(module))w.eval(fs.readFileSync(module,'utf8'));
+for(const module of ['analytics.js','charts.js','research.js','intelligence.js'])if(fs.existsSync(module))w.eval(fs.readFileSync(module,'utf8'));
 w.eval(original);
 await new Promise(resolve=>setTimeout(resolve,150));
 const q=id=>w.document.getElementById(id);
@@ -80,7 +80,7 @@ async function verifyMapping({sport,away,home,ticker,date='2026-10-20T00:00:00Z'
   else if(url.includes('/summary?'))data={header:{id:new URL(url).searchParams.get('event')},boxscore:{teams:[]}};
   else data={events:games};return {ok:true,json:async()=>data};
  };
- for(const module of ['analytics.js','charts.js','research.js'])if(fs.existsSync(module))x.eval(fs.readFileSync(module,'utf8'));x.eval(original);
+ for(const module of ['analytics.js','charts.js','research.js','intelligence.js'])if(fs.existsSync(module))x.eval(fs.readFileSync(module,'utf8'));x.eval(original);
  await new Promise(r=>setTimeout(r,60));if(sport!=='nfl'){x.document.querySelector('[data-lh-sport="'+sport+'"]').click();await new Promise(r=>setTimeout(r,60));}
  const contract=x.document.querySelector('#lh-v2-games [data-lh-contract]');
  assert.equal(Boolean(contract),expected,sport+' '+away+'/'+home+' '+ticker+' matched='+expected);

@@ -3,6 +3,8 @@ on:
   push:
     paths:
       - 'visual.js'
+      - 'intelligence.js'
+      - 'intelligence.css'
       - 'analytics.js'
       - 'charts.js'
       - 'research.js'
@@ -26,7 +28,7 @@ jobs:
         with:
           node-version: '22'
       - name: JavaScript syntax
-        run: node --check visual.js && node --check analytics.js && node --check charts.js && node --check research.js && node --check scripts/test_visual.cjs
+        run: node --check intelligence.js && node --check visual.js && node --check analytics.js && node --check charts.js && node --check research.js && node --check scripts/test_visual.cjs
       - name: Install DOM test dependency
         run: npm install --no-save --package-lock=false jsdom@26
       - name: Verify Games Trades Scores interactions

@@ -15,7 +15,7 @@ w.fetch=async url=>{
  if(u.includes('/summary?'))return json({header:{id:new URL(u).searchParams.get('event')},boxscore:{teams:[]}});
  return json({events:[event,{...event,id:'unmatched-other-game'}]});
 };
-for(const module of ['analytics.js','charts.js','research.js','visual.js'])w.eval(fs.readFileSync(module,'utf8'));
+for(const module of ['analytics.js','charts.js','research.js','intelligence.js','visual.js'])w.eval(fs.readFileSync(module,'utf8'));
 const screen=()=>w.document.getElementById('lh-v2-games');
 (async()=>{
  await delay(100);assert.equal(screen().querySelectorAll('.lh-split-table').length,0,'MLB preview cannot appear on NFL');

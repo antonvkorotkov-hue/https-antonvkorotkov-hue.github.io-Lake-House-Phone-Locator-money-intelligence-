@@ -2,7 +2,7 @@ name: Verify and deploy Lake House Picks
 on:
   push:
     branches: [main]
-    paths: ['index.html', 'visual.js', 'visual.css', 'analytics.js', 'analytics.css', 'charts.js', 'charts.css', 'research.js', 'research.css', 'verification.html', 'scoreboards.json', 'sportsbook-splits.json', 'public-trades.json', 'scripts/**', '.github/workflows/pages.yml']
+    paths: ['index.html', 'visual.js', 'visual.css', 'analytics.js', 'analytics.css', 'charts.js', 'charts.css', 'research.js', 'research.css', 'intelligence.js', 'intelligence.css', 'verification.html', 'scoreboards.json', 'sportsbook-splits.json', 'public-trades.json', 'scripts/**', '.github/workflows/pages.yml']
   workflow_run:
     workflows: ['Refresh public sports trades']
     types: [completed]
@@ -27,11 +27,12 @@ jobs:
           node-version: '22'
       - run: npm install --no-save --package-lock=false jsdom@26 playwright@1.61.1
       - run: npx playwright install --with-deps webkit
-      - run: python scripts/test_collectors.py && python scripts/test_publish.py && python scripts/test_data_integrity.py && python scripts/test_splits.py
+      - run: python scripts/test_collectors.py && python scripts/test_source_enrichment.py && python scripts/test_publish.py && python scripts/test_data_integrity.py && python scripts/test_splits.py
       - run: |
-          for source in visual.js analytics.js charts.js research.js; do node --check "$source"; done
+          for source in visual.js analytics.js charts.js research.js intelligence.js; do node --check "$source"; done
           node scripts/test_visual.cjs
           node scripts/test_analytics.cjs
+          node scripts/test_intelligence.cjs
           node scripts/test_failure_states.cjs
           node scripts/test_charts.cjs
           node scripts/test_research.cjs

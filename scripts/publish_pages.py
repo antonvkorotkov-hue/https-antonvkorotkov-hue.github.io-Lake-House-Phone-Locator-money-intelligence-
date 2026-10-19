@@ -24,7 +24,7 @@ api('/pages/builds', 'POST')
 # Served file hashes are the deployment gate; legacy build records may lag or
 # return 404 while GitHub routes the request through its managed Actions job.
 
-for name in ['index.html','visual.js','visual.css','analytics.js','analytics.css','charts.js','charts.css','research.js','research.css','scoreboards.json','sportsbook-splits.json','public-trades.json','verification.html']:
+for name in ['index.html','visual.js','visual.css','analytics.js','analytics.css','charts.js','charts.css','research.js','research.css','intelligence.js','intelligence.css','scoreboards.json','sportsbook-splits.json','public-trades.json','verification.html']:
     expected = hashlib.sha256(Path(name).read_bytes()).hexdigest()
     for attempt in range(8):
         try:

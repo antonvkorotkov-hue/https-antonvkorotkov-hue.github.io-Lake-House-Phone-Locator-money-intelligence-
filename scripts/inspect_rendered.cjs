@@ -1,5 +1,5 @@
 /* Render committed real source snapshots in WebKit; not a live-feed or physical-device certification. */
-const {webkit}=require('playwright'),fs=require('node:fs'),http=require('node:http');
+const {webkit}=require('playwright'),fs=require('node:fs'),http=require('node:http'),assert=require('node:assert/strict');
 (async()=>{
  const snapshots=JSON.parse(fs.readFileSync('scoreboards.json','utf8')),out=process.env.QA_REAL_DIR||'/tmp/lakehouse-real-render';fs.mkdirSync(out,{recursive:true});
  const server=http.createServer((req,res)=>{const file=req.url.split('?')[0].slice(1)||'index.html';try{res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':file.endsWith('.json')?'application/json':'text/html');res.end(fs.readFileSync(file))}catch{res.writeHead(404);res.end()}}).listen(0,'127.0.0.1');
@@ -15,7 +15,9 @@ const {webkit}=require('playwright'),fs=require('node:fs'),http=require('node:ht
  for(const sport of ['nfl','college','nba','mlb']){
  await page.click('[data-lh-sport="'+sport+'"]');await page.waitForFunction(()=>!document.querySelector('#lh-v2-status').textContent.includes('Refreshing'));
  const event=snapshots.sports[sport].events.find(e=>snapshots.reports?.[sport+':'+e.id]);if(event)await page.selectOption('#lh-v2-event','e:'+event.id);await page.waitForTimeout(300);
- for(const tab of ['games','money','scores','more']){await page.click('[data-screen="'+tab+'"]');await page.waitForTimeout(200);await page.screenshot({path:out+'/'+sport+'-'+tab+'.png',fullPage:true});}
+ for(const event of snapshots.sports[sport].events.filter(e=>snapshots.reports?.[sport+':'+e.id]).slice(0,4)){await page.selectOption('#lh-v2-event','e:'+event.id);await page.waitForTimeout(200);for(const tab of ['games','money']){await page.click('[data-screen="'+tab+'"]');const panel=page.locator('#lh-v2-'+(tab==='money'?'trades':'games'));for(const market of ['winner','spread','total','team','half','props']){await panel.locator('[data-lh-market="'+market+'"]').click();assert.equal(await panel.locator('[data-lh-market="'+market+'"]').getAttribute('aria-pressed'),'true')}}assert(!/NaN|undefined|Invalid Date/.test(await page.locator('#lh-v2-games').innerText()));if(sport==='nfl'&&event.status?.type?.state==='post'){await page.click('[data-screen="games"]');const detail=page.locator('#lh-v2-games .lh-i-panel > details');if(await detail.count())await detail.locator('summary').first().click();await page.screenshot({path:out+'/nfl-completed-'+event.id+'.png',fullPage:true});}}
+ await page.selectOption('#lh-v2-event','e:'+event.id);await page.waitForTimeout(200);
+ for(const tab of ['games','money','scores','more']){await page.click('[data-screen="'+tab+'"]');await page.waitForTimeout(200);await page.screenshot({path:out+'/'+sport+'-'+tab+'.png',fullPage:true});if(tab==='games')await page.screenshot({path:out+'/'+sport+'-games-top.png',fullPage:false});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),'Real-data screen has no document overflow');}
  }
  if(errors.length)throw Error(errors.join('\n'));
  console.log(JSON.stringify({screenshots:16,directory:out,uncaughtErrors:errors,realSourceReportCount:Object.keys(snapshots.reports||{}).length,logoResponses:images},null,2));

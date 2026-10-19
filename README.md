@@ -29,3 +29,13 @@ The existing branch-based Pages publisher remains the publishing owner. The veri
 Public ESPN provider quotes are indirect observations, not a direct authenticated sportsbook feed or guaranteed executable offers. Source opening time is absent when not supplied; first observed is never relabeled opening. Limited public splits are percentages, not absolute dollars or private bet timestamps. Exchange premiums/contracts never become sportsbook handle/tickets. No guaranteed pick, estimated missing observation or invented injury/weather fact is supplied.
 
 More stores validated user-entered **unverified** records on the device, scoped to sport and exact selected event. Import/export preserves nulls and rejects invalid/conflicting records. Damaged storage is retained until explicit confirmed reset; raw backup is available. Original legacy storage remains available for raw export and is never executed or silently assigned to another game.
+
+## Phase 2 live intelligence
+
+`intelligence.js` adds Maria's concise, game-scoped evidence summary on Games and Scores. It separates observed facts, descriptive bookmaker-implied estimates and recommendations. All recommendations remain PASS without independently justified value; no predictive model or calibrated score range is claimed. Same-provider full-game spread/total arithmetic is an informational market-implied score, not a team-total quote or our forecast. Detailed scoring, recent drives, recent results, series context, player comparisons and missing-input explanations expand on demand.
+
+Scheduled summaries retain bounded plays/scoring/drives, source rosters and historical fields. The official MLB StatsAPI crosscheck matches exact local date plus home/away full team names and rejects doubleheader ambiguity; it preserves differing first-pitch times and dates the check rather than overriding ESPN. Source failures retain dated observations with stale/error flags. Summaries refresh after one minute in the browser; no manual refresh is needed to expire a prior report.
+
+Phase 2 evidence: [acceptance](ACCEPTANCE.md), [official-source field audit](PHASE2-SOURCES.md), [Theo QA](PHASE2-QA.md), [Rimma review](PHASE2-REVIEW.md). Source audit limitations remain binding; no universal independent validation of every field or current sportsbook offer is asserted.
+
+Additional checks: `node scripts/test_intelligence.cjs`, `python scripts/test_source_enrichment.py`, `node scripts/inspect_rendered.cjs`. The publisher checks fifteen deployed runtime/report assets, including the new intelligence JavaScript and CSS. Real snapshot tests are source-recording integration tests, distinct from live upstream or physical-iPhone certification.
