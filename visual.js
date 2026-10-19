@@ -108,7 +108,7 @@ function render(){
  $('lh-v2-page-title').textContent=state.tab==='money'?'Trades':state.tab==='scores'?'Scores':state.tab==='more'?'More':'Games';
  $('lh-v2-status').textContent=(state.scoreError?'ESPN: '+state.scoreError+' · ':'')+(state.tradeError?'Trades: '+state.tradeError:'');
  document.querySelectorAll('[data-lh-sport]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lhSport===state.sport)));
- $('lh-v2-games').innerHTML=hero()+marketTabs()+tradePanel()+priceBoard()+analysis();
+ $('lh-v2-games').innerHTML=hero()+marketTabs()+tradePanel()+priceBoard()+statsPanel()+analysis();
  $('lh-v2-trades').innerHTML=hero()+marketTabs()+tradePanel()+analysis();
  $('lh-v2-scores').innerHTML=scorePanel();
 }
@@ -129,7 +129,7 @@ async function loadReport(){
 async function refresh(force=false){
  $('lh-v2-status').textContent='Refreshing verified sources…';
  await Promise.all([loadScores(force),loadTrade()]);renderPicker();render();
- if((document.body.dataset.tab||'games')==='scores')await loadReport();
+ if(force)state.reportEvent='';if(selectedEvent())await loadReport();
 }
 root.addEventListener('click',async e=>{
  const sport=e.target.closest('[data-lh-sport]');if(sport){state.sport=sport.dataset.lhSport;state.selected='';state.report=null;state.reportEvent='';await refresh(false);return}
