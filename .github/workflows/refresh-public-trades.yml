@@ -5,6 +5,7 @@ on:
     paths:
       - 'scripts/collect_public.py'
       - 'scripts/collect_scores.py'
+      - 'scripts/collect_splits.py'
       - 'index.html'
       - '.github/workflows/refresh-public-trades.yml'
   schedule:
@@ -25,13 +26,15 @@ jobs:
           python-version: '3.12'
       - name: Read public scores and record published odds
         run: python scripts/collect_scores.py
+      - name: Read legitimately public sportsbook split preview
+        run: python scripts/collect_splits.py
       - name: Read public market trades
         run: python scripts/collect_public.py
       - name: Publish only when updated
         run: |
           git config user.name "Lake House Data Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public-trades.json scoreboards.json
+          git add public-trades.json scoreboards.json sportsbook-splits.json
           if ! git diff --cached --quiet; then
             git commit -m "Update verified public trade snapshot"
             git pull --rebase origin main

@@ -2,16 +2,18 @@
 'use strict';
 const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const money=v=>Number.isFinite(Number(v))?'$'+Math.round(Number(v)).toLocaleString():'—';
+const number=v=>(typeof v==='number'||typeof v==='string'&&v.trim()!=='')&&Number.isFinite(Number(v))?Number(v):null;
+const money=v=>number(v)!==null?new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(Number(v)):'Unavailable';
 const formatOdds=v=>v==null||v===''?'Unavailable':(Number(v)>0?'+':'')+String(v);
 const sportPaths={nfl:'football/nfl',college:'football/college-football',nba:'basketball/nba',mlb:'baseball/mlb'};
 let generation=0;
-const state={sport:'nfl',selected:'',market:'winner',events:[],markets:[],collected:null,scoreLoaded:null,tradeError:'',collectorErrors:[],scoreError:'',report:null,reportEvent:'',scoresCache:{},quoteHistory:{},scoreSnapshot:null,tab:'games'};
+const state={sport:'nfl',selected:'',market:'winner',events:[],markets:[],collected:null,scoreLoaded:null,tradeError:'',collectorErrors:[],scoreError:'',report:null,reportEvent:'',scoresCache:{},quoteHistory:{},scoreSnapshot:null,historyError:'',reportLoaded:null,reportSource:'',reportError:'',provider:'',contract:'',sourceLoaded:0,splits:[],splitsError:'',splitsLoaded:0,splitsMeta:null,tab:'games'};
 const root=document.createElement('section');root.id='lh-v2';root.className='lh-v2-root';
-root.innerHTML='<div class="lh-v2-head"><div><span class="lh-v2-eyebrow">LAKE HOUSE GAME CENTER</span><h1 id="lh-v2-page-title">Games</h1></div><button id="lh-v2-refresh" type="button" aria-label="Refresh current sports data">↻ Refresh</button></div><div class="lh-v2-sports" role="group" aria-label="Sports"><button data-lh-sport="nfl" aria-pressed="true">NFL</button><button data-lh-sport="college">College Football</button><button data-lh-sport="nba">NBA</button><button data-lh-sport="mlb">MLB</button></div><label class="lh-v2-selector-label" for="lh-v2-event">Selected matchup</label><select id="lh-v2-event" aria-label="Selected matchup"><option>Loading games…</option></select><div id="lh-v2-status" class="lh-v2-status" role="status"></div><div id="lh-v2-games" class="lh-v2-screen"></div><div id="lh-v2-trades" class="lh-v2-screen"></div><div id="lh-v2-scores" class="lh-v2-screen"></div><div id="lh-v2-more" class="lh-v2-screen"><article class="lh-v2-panel"><h2>Sources and limitations</h2><div id="lh-v2-source-status"></div><p>ESPN supplies public game scores and selected statistics and published quotes. Kalshi supplies public, sampled exchange trades. These are not a live feed of DraftKings wager amounts or private sportsbook transactions.</p><p>Unavailable odds, team totals, player props, injuries, and betting percentages are never estimated.</p></article></div>';
+root.innerHTML='<div class="lh-v2-head"><div><span class="lh-v2-eyebrow">LAKE HOUSE GAME CENTER</span><h1 id="lh-v2-page-title">Games</h1></div><button id="lh-v2-refresh" type="button" aria-label="Refresh current sports data">↻ Refresh</button></div><div class="lh-v2-sports" role="group" aria-label="Sports"><button data-lh-sport="nfl" aria-pressed="true">NFL</button><button data-lh-sport="college">College Football</button><button data-lh-sport="nba">NBA</button><button data-lh-sport="mlb">MLB</button></div><label class="lh-v2-selector-label" for="lh-v2-event">Selected matchup</label><select id="lh-v2-event" aria-label="Selected matchup"><option>Loading games…</option></select><div id="lh-v2-status" class="lh-v2-status" role="status"></div><div id="lh-v2-games" class="lh-v2-screen"></div><div id="lh-v2-trades" class="lh-v2-screen"></div><div id="lh-v2-scores" class="lh-v2-screen"></div><div id="lh-v2-more" class="lh-v2-screen"><article class="lh-v2-panel"><h2>Sources and limitations</h2><div id="lh-v2-source-status"></div><p>ESPN supplies public game scores and selected statistics and published quotes. Kalshi supplies public, sampled exchange trades. These are not a live feed of DraftKings wager amounts or private sportsbook transactions.</p><p>Public exchange contracts are alternatives, not sportsbook quotes. Unavailable sportsbook prices and splits are never estimated.</p><p><a href="./verification.html" target="_blank" rel="noopener">Section-by-section acceptance report</a> · <a href="./SOURCE-AUDIT.md" target="_blank" rel="noopener">Source audit and coverage</a></p></article><div id="lh-v2-research"></div></div>';
 const insertion=$('lhVisualHero')||$('gameMoney')||$('scoreboardSection');if(!insertion)return;
 insertion.parentNode.insertBefore(root,insertion);
 document.body.classList.add('lh-v2');
+document.body.dataset.tab=document.body.dataset.tab||'games';
 const leagueTicker={nfl:['KXNFL'],college:['KXNCAAF','KXCFB'],nba:['KXNBA'],mlb:['KXMLB']};
 const marketLabel={winner:'Winner / moneyline',spread:'Alternative winning margins (not sportsbook spread)',total:'Exchange total thresholds (not O/U odds)',team:'Team total O/U',half:'First-half markets',props:'Player props'};
 function leagueFor(m){return (leagueTicker[state.sport]||[]).some(prefix=>String(m.series||'').startsWith(prefix))}
@@ -19,7 +21,7 @@ function shortName(event){return event?.shortName||event?.name||event?.id||'Matc
 function participants(event){const teams=event?.competitions?.[0]?.competitors||[];return {away:teams.find(t=>t.homeAway==='away')||teams[0],home:teams.find(t=>t.homeAway==='home')||teams[1]}}
 function selectedEvent(){return state.events.find(e=>'e:'+e.id===state.selected)||null}
 function selectedMarketKey(){return state.selected.startsWith('m:')?state.selected.slice(2):''}
-function tickerGame(m){return String(m.ticker||'').split('-')[1]||''}
+function tickerGame(m){return String(m.event_ticker||m.ticker||'').split('-')[1]||''}
 function selectedMarkets(){
  const key=selectedMarketKey();if(key)return availableMarkets().filter(m=>tickerGame(m)===key);
  return marketsForEvent(selectedEvent());
@@ -27,11 +29,14 @@ function selectedMarkets(){
 function marketsForEvent(ev){
  if(!ev)return [];
  const pair=participants(ev),a=pair.away?.team?.abbreviation||'',h=pair.home?.team?.abbreviation||'';
- const aliases=x=>x==='WSH'||x==='WAS'?['WSH','WAS']:x==='JAX'||x==='JAC'?['JAX','JAC']:x==='LV'?['LV','LVR']:x==='LAR'?['LAR','LA']: [x];
+ const leagueAliases={nba:{NY:['NY','NYK'],SA:['SA','SAS'],GS:['GS','GSW'],NO:['NO','NOP'],UTAH:['UTAH','UTA']},college:{MOST:['MOST','MOSU'],MTSU:['MTSU','MTU']}};
+ const aliases=x=>leagueAliases[state.sport]?.[x]||(x==='WSH'||x==='WAS'?['WSH','WAS']:x==='JAX'||x==='JAC'?['JAX','JAC']:x==='LV'?['LV','LVR']:x==='LAR'?['LAR','LA']: [x]);
  const day=new Date(ev.date);if(!a||!h||!Number.isFinite(day.getTime()))return [];
  const parts=new Intl.DateTimeFormat('en-US',{timeZone:'America/New_York',year:'2-digit',month:'short',day:'2-digit'}).formatToParts(day);
  const part=k=>parts.find(p=>p.type===k).value;const dateKey=part('year')+part('month').toUpperCase()+part('day');
- return availableMarkets().filter(m=>{const key=tickerGame(m);return aliases(a).some(x=>aliases(h).some(y=>key===dateKey+x+y||key===dateKey+y+x))});
+ const sameDatePair=state.events.filter(e=>{const pair=participants(e);const teams=[pair.away?.team?.abbreviation,pair.home?.team?.abbreviation];if(!teams.includes(a)||!teams.includes(h))return false;const d=new Date(e.date);return Number.isFinite(d.getTime())&&new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(d)===new Intl.DateTimeFormat('en-CA',{timeZone:'America/New_York',year:'numeric',month:'2-digit',day:'2-digit'}).format(day)});
+ if(sameDatePair.length!==1)return [];
+ return availableMarkets().filter(m=>{const key=tickerGame(m);if(!key.startsWith(dateKey))return false;const tail=key.slice(dateKey.length);const timed=/^\d{4}(?=[A-Z])/.test(tail);if(timed&&sameDatePair.length!==1)return false;const pair=timed?tail.slice(4):tail;return aliases(a).some(x=>aliases(h).some(y=>pair===x+y||pair===y+x))});
 }
 function availableMarkets(){return state.markets.filter(leagueFor)}
 function groupMarketGames(){const map=new Map();for(const m of availableMarkets()){const key=tickerGame(m);if(!map.has(key))map.set(key,[]);map.get(key).push(m)}return map}
@@ -39,82 +44,62 @@ function selection(){
  const ev=selectedEvent();if(ev)return {event:ev,title:shortName(ev)};
  const m=selectedMarkets()[0];return {event:null,title:(m?.event||selectedMarketKey()||'Choose a game').split(':')[0]};
 }
-function logo(t){const src=t?.team?.logo;return src&&/^https:\/\//.test(src)?'<img class="lh-v2-teamlogo" src="'+esc(src)+'" alt="" loading="lazy">':'<span class="lh-v2-placeholder">🏈</span>'}
+function logo(t){const src=t?.team?.logo||t?.team?.logos?.[0]?.href;return src&&/^https:\/\//.test(src)?'<img class="lh-v2-teamlogo" src="'+esc(src)+'" alt="" loading="lazy">':'<span class="lh-v2-placeholder">'+(state.sport==='nba'?'🏀':state.sport==='mlb'?'⚾':'🏈')+'</span>'}
 function hero(){
  const {event,title}=selection();if(!event&&!state.selected)return '<article class="lh-v2-panel"><h2>No games available</h2><p>No scoreboard games or matching exchange markets were returned. Try Refresh or another sport.</p></article>';if(!event)return '<article class="lh-v2-hero"><div class="lh-v2-league">'+esc(state.sport.toUpperCase())+'</div><h2>'+esc(title)+'</h2><p>Exchange activity available. No matching ESPN scoreboard game verified for this selection.</p></article>';
  const {away,home}=participants(event),status=event.status?.type?.detail||event.status?.type?.description||'Status unavailable';
- return '<article class="lh-v2-hero"><div class="lh-v2-league">'+esc(state.sport.toUpperCase())+' · '+esc(status)+'</div><div class="lh-v2-match"><div class="lh-v2-team">'+logo(away)+'<strong>'+esc(away?.team?.abbreviation||'Away')+'</strong><small>'+esc(away?.team?.shortDisplayName||away?.team?.displayName||'')+'</small><b>'+esc(away?.score??'—')+'</b></div><div class="lh-v2-mid"><strong>@</strong><small>'+esc(event.date?new Date(event.date).toLocaleString():'Time unavailable')+'</small></div><div class="lh-v2-team">'+logo(home)+'<strong>'+esc(home?.team?.abbreviation||'Home')+'</strong><small>'+esc(home?.team?.shortDisplayName||home?.team?.displayName||'')+'</small><b>'+esc(home?.score??'—')+'</b></div></div><div class="lh-v2-credit">ESPN scoreboard · fetched '+esc(state.scoreLoaded?new Date(state.scoreLoaded).toLocaleTimeString():'not yet')+'</div></article>';
+ return '<article class="lh-v2-hero"><div class="lh-v2-league">'+esc(state.sport.toUpperCase())+' · '+esc(status)+'</div><div class="lh-v2-match"><div class="lh-v2-team">'+logo(away)+'<strong>'+esc(away?.team?.abbreviation||'Away')+'</strong><small>'+esc(away?.team?.shortDisplayName||away?.team?.displayName||'')+'</small><b>'+esc(event.status?.type?.state==='pre'||event.status?.type?.description==='Scheduled'||event.status?.type?.detail==='Scheduled'?'—':away?.score??'—')+'</b></div><div class="lh-v2-mid"><strong>@</strong><small>'+esc(event.date?new Date(event.date).toLocaleString():'Time unavailable')+'</small></div><div class="lh-v2-team">'+logo(home)+'<strong>'+esc(home?.team?.abbreviation||'Home')+'</strong><small>'+esc(home?.team?.shortDisplayName||home?.team?.displayName||'')+'</small><b>'+esc(event.status?.type?.state==='pre'||event.status?.type?.description==='Scheduled'||event.status?.type?.detail==='Scheduled'?'—':home?.score??'—')+'</b></div></div><div class="lh-v2-credit">ESPN scoreboard · fetched '+esc(state.scoreLoaded?new Date(state.scoreLoaded).toLocaleTimeString():'not yet')+'</div></article>';
 }
-function marketTabs(){return '<div class="lh-v2-market-tabs" role="group" aria-label="Market category">'+Object.entries(marketLabel).map(([key,label])=>'<button type="button" data-lh-market="'+key+'" aria-pressed="'+(state.market===key)+'">'+esc(key==='winner'?'Moneyline':key==='spread'?'Spread':key==='total'?'Total':key==='team'?'Team total':key==='half'?'1st half':'Props')+'</button>').join('')+'</div>'}
-function relevantSeries(m){const ser=String(m.series||'');return state.market==='winner'?(ser.includes('GAME')):state.market==='spread'?(ser.includes('SPREAD')):state.market==='total'?(ser.includes('TOTAL')):false}
-function tradesForMarkets(ms){return ms.flatMap(m=>(m.trades||[]).map(t=>({t,m}))).filter(x=>Number.isFinite(Number(x.t.premium_usd))&&Number(x.t.premium_usd)>=0)}
+function marketTabs(){return '<div class="lh-v2-market-tabs" role="group" aria-label="Market category">'+Object.entries(marketLabel).map(([key,label])=>'<button type="button" data-lh-market="'+key+'" aria-pressed="'+(state.market===key)+'">'+esc(key==='winner'?'Moneyline':key==='spread'?'Spread':key==='total'?'Total':key==='team'?'Team total':key==='half'?(state.sport==='mlb'?'First 5':'1st half'):'Props')+'</button>').join('')+'</div>'}
+function category(m){if(m.category)return m.category;const ser=String(m.series||'');return ser.includes('TEAMTOTAL')?'team':/1H|HALF/.test(ser)?'half':ser.endsWith('GAME')?'winner':ser.endsWith('SPREAD')?'spread':ser.endsWith('TOTAL')?'total':'props'}
+function relevantSeries(m){return category(m)===state.market}
+function tradesForMarkets(ms){return ms.flatMap(m=>(m.trades||[]).map(t=>({t,m}))).filter(x=>number(x.t.premium_usd)!==null&&number(x.t.contracts)!==null&&Number(x.t.contracts)>0&&Number(x.t.premium_usd)>=0&&Number(x.t.premium_usd)<=Number(x.t.contracts)&&['yes','no'].includes(x.t.side)&&Number.isFinite(Date.parse(x.t.time)))}
 function spark(ms){
- const candidates=ms.map(m=>({m,items:(m.trades||[]).filter(t=>Date.parse(t.time)&&Number(t.contracts)>0&&Number.isFinite(Number(t.premium_usd))).sort((a,b)=>Date.parse(a.time)-Date.parse(b.time))})).sort((a,b)=>b.items.length-a.items.length);
- const best=candidates[0];
- if(!best||best.items.length<2)return '<div class="lh-v2-nochart">Not enough recorded trades to show price movement. No trend inferred.</div>';
- const items=best.items;
- const timeLabel=t=>new Date(t).toLocaleString([],{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
- const pct=t=>{const count=Number(t.contracts),premium=Number(t.premium_usd),p=premium/count;return Math.min(100,Math.max(0,(t.side==='no'?1-p:p)*100))};
- const start=Date.parse(items[0].time),end=Date.parse(items[items.length-1].time);
- const buckets=Array.from({length:18},()=>({premium:0,weighted:0,contracts:0,trades:0}));
- for(const t of items){
-  const ts=Date.parse(t.time),i=Math.min(17,Math.floor(18*(ts-start)/Math.max(1,end-start+1)));
-  const c=Number(t.contracts);buckets[i].premium+=Number(t.premium_usd);
-  buckets[i].weighted+=pct(t)*c;buckets[i].contracts+=c;buckets[i].trades++;
- }
- const active=buckets.map((d,i)=>({...d,i,price:d.contracts?d.weighted/d.contracts:null})).filter(x=>x.trades);
- if(active.length<2)return '<div class="lh-v2-nochart">All sampled transactions fall in one interval. Not enough timed observations to show a price trend.</div>';
- const x=i=>54+i*35,y=p=>174-(p*1.35);
- const points=active.map(d=>x(d.i).toFixed(1)+','+y(d.price).toFixed(1)).join(' ');
- const dots=active.map(d=>'<circle cx="'+x(d.i)+'" cy="'+y(d.price).toFixed(1)+'" r="4" fill="#40d7ff"><title>'+esc('Bucket '+(d.i+1)+': '+d.price.toFixed(1)+'% implied YES price from sampled trades')+'</title></circle>').join('');
- const grid=[0,25,50,75,100].map(v=>'<line x1="52" y1="'+y(v)+'" x2="655" y2="'+y(v)+'" stroke="#30516a" stroke-dasharray="3 5"/><text x="44" y="'+(y(v)+4)+'" text-anchor="end" fill="#afcde2" font-size="16">'+v+'%</text>').join('');
- const max=Math.max(1,...buckets.map(d=>d.premium));
- const bars=buckets.map((d,i)=>'<rect x="'+(54+i*35)+'" y="'+(147-118*d.premium/max).toFixed(1)+'" width="24" height="'+(118*d.premium/max).toFixed(1)+'" rx="3" fill="#39acfa"><title>'+esc('Bucket '+(i+1)+': $'+d.premium.toFixed(2)+' sampled premium from '+d.trades+' trades')+'</title></rect>').join('');
- const first=active[0].price,last=active[active.length-1].price,delta=last-first;
- return '<div class="lh-v2-chart-explain"><strong>'+esc(best.m.market||best.m.ticker)+'</strong><small>Most-sampled market only · '+items.length+' trades · sampled Kalshi transaction-derived YES prices, not sportsbook lines</small></div>'+
- '<div class="lh-v2-chart-explain"><strong>First interval average '+first.toFixed(1)+'% → last interval average '+last.toFixed(1)+'%</strong><small>Change '+(delta>=0?'+':'')+delta.toFixed(1)+' percentage points · not a forecast</small></div>'+
- '<h3 class="lh-v2-chart-title">Implied YES price over sampled time (0–100%)</h3>'+
- '<svg class="lh-v2-line" viewBox="0 0 700 208" role="img" aria-label="Sampled implied YES price by time, with a zero to 100 percent vertical axis">'+grid+'<polyline points="'+points+'" fill="none" stroke="#40d7ff" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>'+dots+'<text x="54" y="200" fill="#afcde2" font-size="16">'+esc(timeLabel(start))+'</text><text x="655" y="200" text-anchor="end" fill="#afcde2" font-size="16">'+esc(timeLabel(end))+'</text></svg>'+
- '<h3 class="lh-v2-chart-title">Sampled premium per time interval ($; NOT total handle)</h3>'+
- '<svg class="lh-v2-line" viewBox="0 0 700 182" role="img" aria-label="Observed Kalshi trade premium in 18 chronological intervals in dollars"><line x1="52" x2="655" y1="147" y2="147" stroke="#afcde2"/><text x="50" y="20" text-anchor="end" fill="#afcde2" font-size="16">'+esc(money(max))+'</text><text x="50" y="148" text-anchor="end" fill="#afcde2" font-size="16">$0</text>'+bars+'<text x="54" y="174" fill="#afcde2" font-size="16">'+esc(timeLabel(start))+'</text><text x="655" y="174" text-anchor="end" fill="#afcde2" font-size="16">'+esc(timeLabel(end))+'</text></svg>'+
- '<p class="lh-v2-note">Exchange YES price is calculated from observed contract premium divided by contracts (NO-side trades are inverted). Samples are incomplete; gaps are not zero volume. Each chart describes only the named market, not all sportsbook bets.</p>';
+ const chosen=ms.find(m=>m.ticker===state.contract)||ms.slice().sort((a,b)=>(b.trades?.length||0)-(a.trades?.length||0))[0];
+ if(!chosen)return '<p>No matching exchange contracts in the sampled collection.</p>';
+ const items=tradesForMarkets([chosen]).map(x=>x.t);
+ if(!window.LHCharts)return '<p>Chart module unavailable. Refresh to retry.</p>';
+ return window.LHCharts.price({title:'Observed YES contract price · '+(chosen.market||chosen.ticker),points:items.map(t=>({time:t.time,value:100*(t.side==='no'?1-Number(t.premium_usd)/Number(t.contracts):Number(t.premium_usd)/Number(t.contracts))})),unit:'percent',source:'Kalshi sampled public transactions · '+chosen.ticker,observedLabel:'Sampled transaction-derived price; not sportsbook probability or opening odds'})+window.LHCharts.activity({title:'Sampled transaction activity · '+(chosen.market||chosen.ticker),points:items.map(t=>({time:t.time,premium:Number(t.premium_usd),contracts:Number(t.contracts)})),source:'Kalshi public trades · incomplete sample; not sportsbook handle'});
 }
 function tradeStats(ms){
- const t=tradesForMarkets(ms),sum=t.reduce((n,x)=>n+Number(x.t.premium_usd),0);
- return '<div class="lh-v2-stats"><div><small>Trades</small><strong>'+t.length.toLocaleString()+'</strong></div><div><small>Sampled premium</small><strong>'+money(sum)+'</strong></div><div><small>Contracts traded</small><strong>'+t.reduce((n,x)=>n+Number(x.t.contracts||0),0).toLocaleString()+'</strong></div></div>';
+ const t=tradesForMarkets(ms),sum=t.reduce((n,x)=>n+Number(x.t.premium_usd),0);if(!t.length)return '<p>No validated sampled transactions returned. Premium and contract counts are unobserved, not verified zero market volume.</p>';
+ return '<div class="lh-v2-stats"><div><small>Sampled trades</small><strong>'+t.length.toLocaleString()+'</strong></div><div><small>Sampled premium</small><strong>'+money(sum)+'</strong></div><div><small>Sampled contracts</small><strong>'+t.reduce((n,x)=>n+Number(x.t.contracts||0),0).toLocaleString()+'</strong></div></div>';
 }
-function priceBoard(){
- const ev=selectedEvent(),quote=ev?.competitions?.[0]?.odds?.[0],pair=participants(ev);
- const h=quote?.moneyline?.home?.close?.odds??quote?.homeTeamOdds?.moneyLine,a=quote?.moneyline?.away?.close?.odds??quote?.awayTeamOdds?.moneyLine;
- const line=(market,side)=>{const q=quote?.[market]?.[side]?.close;return q?[q.line,q.odds].filter(x=>x!=null).join(' @ '):null};
- const open=quote?.moneyline;const opening=open?.home?.open?.odds!=null||open?.away?.open?.odds!=null?'Source open: '+formatOdds(open?.away?.open?.odds)+' / '+formatOdds(open?.home?.open?.odds):'Opening quotes not supplied';
- const total=quote?.overUnder;const present=total!==undefined&&total!==null&&total!=='';
- const cards=[
- ['Moneyline',h!=null||a!=null?esc(pair.away?.team?.abbreviation||'Away')+' '+formatOdds(a)+' / '+esc(pair.home?.team?.abbreviation||'Home')+' '+formatOdds(h):'Not published',opening],
- ['Spread / run line',line('pointSpread','away')||line('pointSpread','home')?(pair.away?.team?.abbreviation||'Away')+' '+(line('pointSpread','away')||'Unavailable')+' / '+(pair.home?.team?.abbreviation||'Home')+' '+(line('pointSpread','home')||'Unavailable'):quote?.details||'Not published','ESPN close/latest field; not guaranteed live'],
- ['Game over / under',line('total','over')||line('total','under')?'Over '+(line('total','over')||'Unavailable')+' / Under '+(line('total','under')||'Unavailable'):present?'O/U '+total:'Not published','ESPN close/latest field; source observation'],
- ['Team totals','Not published','Over / Under for each team'],
- ['First half','Not published','Spread and points'],
- ['Player props','Not published','Player lines and prices']
- ];
- return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>Market board</h2><small>'+esc(quote?.provider?.name||'No verified book quote')+'</small></div><div class="lh-v2-odds">'+cards.map(c=>'<div class="lh-v2-odd"><small>'+esc(c[0])+'</small><strong>'+esc(c[1])+'</strong><span>'+esc(c[2])+'</span></div>').join('')+'</div><p class="lh-v2-note">ESPN published odds when included; retrieved '+esc(state.scoreLoaded?new Date(state.scoreLoaded).toLocaleTimeString():'not yet')+'. Prices and availability are not guaranteed current.</p></article>';
+function quote(){const qs=selectedEvent()?.competitions?.[0]?.odds||[];return qs.find(q=>String(q.provider?.id||q.provider?.name)===state.provider)||qs[0]||null}
+function providerPicker(owner){const qs=selectedEvent()?.competitions?.[0]?.odds||[];if(qs.length<2)return '';return '<label for="lh-v2-provider-'+esc(owner)+'">Published sportsbook provider</label><select id="lh-v2-provider-'+esc(owner)+'" data-lh-provider>'+qs.map(q=>{const key=String(q.provider?.id||q.provider?.name);return '<option value="'+esc(key)+'"'+(quote()===q?' selected':'')+'>'+esc(q.provider?.name||'Unknown provider')+'</option>'}).join('')+'</select>'}
+function openingNote(q,market,sides){return sides.map(side=>{const o=q?.[market]?.[side]?.open;return o?side+' '+[o.line,o.odds].filter(v=>v!=null&&v!=='').join(' @ '):side+' unavailable'}).join(' / ')}
+function priceBoard(owner){
+ const ev=selectedEvent(),q=quote(),pair=participants(ev),a=pair.away?.team?.abbreviation||'Away',h=pair.home?.team?.abbreviation||'Home';
+ const ml=side=>q?.moneyline?.[side]?.close?.odds??q?.[side+'TeamOdds']?.moneyLine;
+ const line=(market,side)=>{const item=q?.[market]?.[side]?.close;return item?[item.line,item.odds].filter(x=>x!=null&&x!=='').join(' @ '):'Unavailable'};
+ const cards=[['Moneyline',ml('away')!=null||ml('home')!=null?a+' '+formatOdds(ml('away'))+' / '+h+' '+formatOdds(ml('home')):'Not published',openingNote(q,'moneyline',['away','home'])],['Spread / run line',q?.pointSpread?a+' '+line('pointSpread','away')+' / '+h+' '+line('pointSpread','home'):q?.details||'Not published',openingNote(q,'pointSpread',['away','home'])],['Game total',q?.total?'Over '+line('total','over')+' / Under '+line('total','under'):number(q?.overUnder)!==null?'O/U '+q.overUnder:'Not published',openingNote(q,'total',['over','under'])],['Team totals','Not published','No verified sportsbook feed configured'],['First half','Not published','No verified sportsbook feed configured'],['Player props','Not published','No verified sportsbook feed configured']];
+ return '<article class="lh-v2-panel"><h2>Sportsbook quote board</h2>'+providerPicker(owner)+'<p>'+esc(q?.provider?.name||'No verified book quote')+' · ESPN published close/latest fields, observed '+esc(state.scoreLoaded?new Date(state.scoreLoaded).toLocaleString():'time unavailable')+'</p><div class="lh-v2-odds">'+cards.map(c=>'<div class="lh-v2-odd"><small>'+esc(c[0])+'</small><strong>'+esc(c[1])+'</strong><span>Source open: '+esc(c[2])+'</span></div>').join('')+'</div><p class="lh-v2-note">Source opening timestamps are not supplied. Close/latest fields are observations, not guaranteed live or executable offers. Exchange alternatives are shown separately below.</p></article>';
 }
-function tradePanel(){
- const all=selectedMarkets(),subset=all.filter(relevantSeries);
- const stamps=all.map(m=>Date.parse(m.collected_at||state.collected)).filter(Number.isFinite);
- const collected=stamps.length?new Date(Math.min(...stamps)):null,stale=!collected||Date.now()-collected.getTime()>1800000;
- if(['team','half','props'].includes(state.market)){
-  return '<article class="lh-v2-panel lh-v2-unavailable"><h2>'+esc(marketLabel[state.market])+'</h2><p>No verified feed is configured for this market. Prices, volume and betting splits are unavailable; this is not zero activity.</p><p>Use Moneyline, Spread or Total for the separately labeled sportsbook quotes and exchange observations that are available.</p></article>';
- }
-
- return '<article class="lh-v2-panel"><div class="lh-v2-title"><h2>'+esc(marketLabel[state.market])+'</h2><small>'+(stale?'STALE SNAPSHOT':'Kalshi public trades')+'</small></div>'+(subset.length?tradeStats(subset)+'<h3 class="lh-v2-chart-title">Recorded trade premium by time interval</h3>'+spark(subset):'<div class="lh-v2-nochart">No recorded '+esc(marketLabel[state.market].toLowerCase())+' contracts for this matchup in the current sample.</div>')+'<p class="lh-v2-note">Snapshot: '+esc(collected?collected.toLocaleString():'Unavailable')+(stale?' · STALE':'')+'. '+esc(state.tradeError||'Sampled Kalshi exchange premium, not sportsbook betting handle. Spread contracts are winning margins and totals are individual thresholds.')+'</p></article>';
+function tradePanel(owner){
+ const all=selectedMarkets(),subset=all.filter(relevantSeries);const selected=subset.find(m=>m.ticker===state.contract)||subset.slice().sort((a,b)=>(b.trades?.length||0)-(a.trades?.length||0))[0];
+ const collected=selected?.collected_at||state.collected;const age=Date.parse(collected);const stale=!Number.isFinite(age)||Date.now()-age>1800000;
+ const rawPrice=v=>number(v)!==null&&number(v)>0&&number(v)<1?money(Number(v))+' per YES contract':'No interior quote verified';
+ const quotes=selected?'<p>YES bid: '+esc(rawPrice(selected.yes_bid_dollars))+' · YES ask: '+esc(rawPrice(selected.yes_ask_dollars))+' · Last reported: '+esc(rawPrice(selected.last_price_dollars))+'</p><p class="lh-v2-note">Market quote observation: '+esc(selected.quote_observed_at?new Date(selected.quote_observed_at).toLocaleString():'timestamp not supplied for this sample')+'. Quotes are separate from the sampled trade history and are not guaranteed executable.</p>':'';
+ const picker=subset.length?'<label for="lh-v2-contract-'+esc(owner)+'">Exchange contract / exact outcome</label><select id="lh-v2-contract-'+esc(owner)+'" data-lh-contract>'+subset.map(m=>'<option value="'+esc(m.ticker)+'"'+(m===selected?' selected':'')+'>'+esc(m.market||m.ticker)+(m.yes_sub_title?' · '+esc(m.yes_sub_title):'')+'</option>').join('')+'</select>':'';
+ return '<article class="lh-v2-panel"><h2>Exchange alternative · '+esc({winner:'Winner',spread:'Winning margin',total:'Game total threshold',team:'Team total threshold',half:state.sport==='mlb'?'First five innings contract':'First-half contract',props:'Player contract'}[state.market])+'</h2><p>Kalshi public exchange · '+(stale?'STALE / unavailable collection time':'timestamped sample')+'</p>'+picker+quotes+(selected?tradeStats([selected])+spark([selected]):'<p>No matching '+esc(state.market==='half'&&state.sport==='mlb'?'first-five-innings':marketLabel[state.market])+' exchange observations in this bounded snapshot. This does not mean zero market activity.</p>')+'<p class="lh-v2-note">Collection: '+esc(collected?new Date(collected).toLocaleString():'Unavailable')+'. Exchange contracts differ from sportsbook lines. Premium is contracts × traded outcome price, never sportsbook dollar handle or ticket share.</p></article>';
 }
-function analysis(){
- const ms=selectedMarkets(),num=tradesForMarkets(ms).length,quote=selectedEvent()?.competitions?.[0]?.odds?.[0];
- let text='For this matchup: '+num+' sampled exchange transactions'+(quote?' and a published game quote.':'. No published sportsbook quote for this game.');
- text+=' Without verified team totals, current injury status, market price history and betting splits, no priced edge can be confirmed.';
- return '<article class="lh-v2-insight"><h2>✦ MARIA INSIGHT</h2><p>'+esc(text)+'</p><small>Evidence based · No guaranteed pick</small></article>';
+function splitPanel(){
+ const ev=selectedEvent(),entry=ev?state.splits.find(x=>x.mapping_status==='matched'&&x.sport===state.sport&&String(x.event_id)===String(ev.id)):null;
+ let html='<article class="lh-v2-panel"><h2>Sportsbook money / ticket splits</h2>'+(state.splitsError?'<p class="lh-v2-status">'+esc(state.splitsError)+'</p>':'');
+ if(!entry)return html+'<p>No verified matched public split entry for this selection in the limited preview. Full-game total and team-total splits, private wager amounts and individual wager timestamps are not available from the configured sources.</p>'+(state.splitsError?'<p>'+esc(state.splitsError)+'</p>':'')+'</article>';
+ const observed=Date.parse(entry.observed_at),stale=!Number.isFinite(observed)||Date.now()-observed>1800000;
+ const url=String(entry.source_url||'');
+ html+='<p>'+esc(entry.provider)+' · Page retrieved '+esc(Number.isFinite(observed)?new Date(observed).toLocaleString():'time unavailable')+(stale?' · STALE observation':'')+'</p><p>Source publication/update time: '+esc(entry.source_updated_at||'not supplied; percentages may be delayed')+'. Do not assume these splits are contemporaneous with current odds.</p>';
+ const key=state.market==='winner'?'moneyline':state.market==='spread'?'spread':null;
+ if(key){html+='<div class="lh-c-scroll"><table class="lh-split-table"><caption>Published '+esc(key)+' percentages · 0–100% scale</caption><thead><tr><th>Side / quote</th><th>Dollar handle share</th><th>Ticket share</th><th>Handle − tickets</th></tr></thead><tbody>';
+ for(const side of ['away','home']){const team=entry[side],q=team?.[key];const handle=number(q?.handle_pct),tickets=number(q?.ticket_pct);if(!team||handle===null||tickets===null||handle<0||handle>100||tickets<0||tickets>100)continue;html+='<tr><th>'+esc(team.team)+' '+esc(q.line||'')+'</th><td>'+handle+'%</td><td>'+tickets+'%</td><td>'+(handle-tickets).toFixed(1)+' percentage points</td></tr>';}
+ html+='</tbody></table></div><p>Actual total dollar handle and ticket counts are not supplied. Percentages describe the publisher’s reported sample, not all sportsbooks.</p>';
+ }else html+='<p>'+esc(entry.total_limitation||'No verified percentages for the selected market.')+'</p>';
+ html+='<p>'+esc(entry.coverage||'Limited public preview')+'</p>'+(url.startsWith('https://')?'<p><a href="'+esc(url)+'" target="_blank" rel="noopener">Open the published source</a></p>':'');return html+'</article>';
 }
+async function loadSplits(token=generation,force=false){if(!force&&state.splitsLoaded&&Date.now()-state.splitsLoaded<120000)return;try{const r=await fetch('./sportsbook-splits.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(token!==generation)return;if(!Array.isArray(j.entries))throw Error('Invalid split snapshot');state.splits=j.entries;state.splitsMeta=j;state.splitsError=(j.errors||[]).join(' · ');state.splitsLoaded=Date.now()}catch(e){if(token===generation)state.splitsError='Public split preview unavailable: '+e.message}}
+function analysis(){const count=tradesForMarkets(selectedMarkets()).length;return '<article class="lh-v2-insight"><h2>✦ MARIA · EVIDENCE STATUS</h2><p>'+count+' validated sampled exchange transactions for this selection. '+(quote()?'A provider-attributed ESPN game quote is available. ':'No verified sportsbook game quote supplied. ')+'Observed prices and game statistics are evidence, not a forecast. Unavailable sportsbook splits cannot establish an edge or prove a late large wager.</p></article>'}
+function analyticsPanel(){const warning=(state.reportError?'<p class="lh-v2-status">'+esc(state.reportError)+'</p>':'')+(state.reportLoaded&&Date.now()-state.reportLoaded>1800000?'<p class="lh-v2-status">STALE report: '+esc(new Date(state.reportLoaded).toLocaleString())+'</p>':'');if(window.LHAnalytics)return warning+window.LHAnalytics.render(state.report,selectedEvent(),state.sport,{fetchedAt:state.reportLoaded,source:state.reportSource,error:state.reportError});return statsPanel()+injuryPanel()}
 function statsPanel(){
  const report=state.report;if(report?.error)return '<article class="lh-v2-panel"><h2>Team comparison</h2><p>Report unavailable: '+esc(report.error)+'. Use Refresh to retry.</p></article>';if(!report&&!selectedEvent())return '<article class="lh-v2-panel"><h2>Team comparison</h2><p>Select a verified scoreboard game to view statistics.</p></article>';if(!report)return '<article class="lh-v2-panel"><h2>Team comparison</h2><p>Loading verified team and player statistics…</p></article>';
  const teams=report.boxscore?.teams||[];
@@ -135,7 +120,7 @@ function injuryPanel(){
 }
 function scorePanel(){
  const ev=selectedEvent();const eventText=ev?'Report: '+shortName(ev):'Choose a scoreboard game';
- return hero()+'<div class="lh-v2-context">'+esc(eventText)+'</div>'+statsPanel()+injuryPanel()+priceBoard()+analysis();
+ return hero()+'<div class="lh-v2-context">'+esc(eventText)+'</div>'+analyticsPanel()+priceBoard('scores')+analysis();
 }
 function renderPicker(){
  const el=$('lh-v2-event'),prior=state.selected;el.replaceChildren();
@@ -149,24 +134,26 @@ function renderPicker(){
 function render(){
  state.tab=document.body.dataset.tab||'games';
  $('lh-v2-page-title').textContent=state.tab==='money'?'Trades':state.tab==='scores'?'Scores':state.tab==='more'?'More':'Games';
- $('lh-v2-status').textContent=(state.scoreError?'ESPN: '+state.scoreError+' · ':'')+(state.tradeError?'Trades: '+state.tradeError:'');
+ $('lh-v2-status').textContent=(state.scoreError?'ESPN: '+state.scoreError+' · ':'')+(state.historyError?state.historyError+' · ':'')+(state.tradeError?'Trades: '+state.tradeError:'');
  document.querySelectorAll('[data-lh-sport]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lhSport===state.sport)));
- $('lh-v2-games').innerHTML=hero()+marketTabs()+quoteMovement()+tradePanel()+priceBoard()+statsPanel()+analysis();
- $('lh-v2-trades').innerHTML=hero()+marketTabs()+quoteMovement()+tradePanel()+analysis();
+ $('lh-v2-games').innerHTML=hero()+marketTabs()+priceBoard('games')+quoteMovement()+splitPanel()+tradePanel('games')+analyticsPanel()+analysis();
+ $('lh-v2-trades').innerHTML=hero()+marketTabs()+quoteMovement()+splitPanel()+tradePanel('trades')+analysis();
  $('lh-v2-scores').innerHTML=scorePanel();
- const diagnostics=$('lh-v2-source-status');if(diagnostics)diagnostics.innerHTML='<p>Scoreboard: '+esc(state.scoreLoaded?new Date(state.scoreLoaded).toLocaleString():'Unavailable')+'</p><p>Exchange snapshot: '+esc(state.collected?new Date(state.collected).toLocaleString():'Unavailable')+'</p><p>Browser refresh: every minute while visible. Scheduled collection: requested every 10 minutes; GitHub may delay runs.</p>'+((state.collectorErrors.length||state.scoreSnapshot?.errors?.length)?'<ul>'+[...state.collectorErrors,...(state.scoreSnapshot?.errors||[])].map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>':'<p>No errors reported by the loaded collector snapshots.</p>');
+ if(typeof research!=='undefined'&&research)research.refreshContext();
+ const diagnostics=$('lh-v2-source-status');if(diagnostics)diagnostics.innerHTML='<p>Scoreboard: '+esc(state.scoreLoaded?new Date(state.scoreLoaded).toLocaleString():'Unavailable')+'</p><p>Exchange snapshot: '+esc(state.collected?new Date(state.collected).toLocaleString():'Unavailable')+'</p><p>Browser refresh: every minute while visible. Scheduled collection: requested every 10 minutes; GitHub may delay runs.</p>'+'<p>Matched public split entries: '+state.splits.length+'. '+esc(state.splitsError||'Limited public preview; publisher update time may be unknown.')+'</p>'+((state.collectorErrors.length||state.scoreSnapshot?.errors?.length||state.scoreSnapshot?.report_errors?.length)?'<ul>'+[...state.collectorErrors,...(state.scoreSnapshot?.errors||[]),...(state.scoreSnapshot?.report_errors||[])].map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>':'<p>No source errors reported in the loaded snapshots. Coverage is bounded; absence is not proof of no market activity.</p>');
 }
-async function loadTrade(){
- try{const res=await fetch('./public-trades.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!res.ok)throw Error('HTTP '+res.status);const j=await res.json();state.markets=j.markets||[];state.collected=j.collected_at;state.collectorErrors=j.errors||[];state.tradeError=j.errors?.length?'Collector reports '+j.errors.length+' errors':''}catch(e){state.tradeError=e.message}
+async function loadTrade(token=generation,force=false){
+ if(!force&&state.sourceLoaded&&Date.now()-state.sourceLoaded<120000)return;
+ try{const res=await fetch('./public-trades.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!res.ok)throw Error('HTTP '+res.status);const j=await res.json();if(token!==generation)return;if(!Array.isArray(j.markets))throw Error('Invalid trade snapshot');state.markets=j.markets;state.sourceLoaded=Date.now();state.collected=j.collected_at;state.collectorErrors=j.errors||[];state.tradeError=j.errors?.length?'Collector reports '+j.errors.length+' errors':''}catch(e){if(token===generation)state.tradeError=e.message}
 }
 async function loadScores(force=false,token=generation){
  const sport=state.sport;
  if(!force&&state.scoresCache[sport]&&Date.now()-state.scoresCache[sport].time<60000){const c=state.scoresCache[sport];state.events=c.events;state.scoreLoaded=c.time;state.scoreError=c.warning||'';return}
  try{
-  const res=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+sportPaths[sport]+'/scoreboard',{cache:'no-store',signal:AbortSignal.timeout(15000)});
+  const res=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+sportPaths[sport]+'/scoreboard'+(sport==='college'?'?groups=80&limit=1000':'?limit=1000'),{cache:'no-store',signal:AbortSignal.timeout(15000)});
   if(!res.ok)throw Error('HTTP '+res.status);
   const j=await res.json();if(token!==generation)return;
-  state.events=j.events||[];state.scoreLoaded=Date.now();state.scoreError='';
+  if(!Array.isArray(j.events))throw Error('Invalid scoreboard payload');state.events=j.events;state.scoreLoaded=Date.now();state.scoreError='';
  }catch(e){
   if(token!==generation)return;
   const saved=state.scoreSnapshot?.sports?.[sport];
@@ -176,48 +163,49 @@ async function loadScores(force=false,token=generation){
  if(token!==generation)return;
  state.scoresCache[sport]={events:state.events,time:state.scoreLoaded||0,warning:state.scoreError};
 }
-async function loadHistory(){
- try{const r=await fetch('./scoreboards.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)return;const j=await r.json();state.scoreSnapshot=j;state.quoteHistory=j.history||{}}catch(e){/* Direct ESPN remains usable. */}
+async function loadHistory(token=generation,force=false){
+ if(!force&&state.scoreSnapshot&&Date.now()-(state.historyLoaded||0)<120000)return;
+ try{const r=await fetch('./scoreboards.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(token!==generation)return;state.scoreSnapshot=j;state.quoteHistory=j.history||{};state.historyLoaded=Date.now();state.historyError=''}catch(e){if(token===generation)state.historyError='Scheduled snapshots unavailable: '+e.message}
 }
 function quoteMovement(){
- const ev=selectedEvent();if(!ev)return '';
- const provider=ev.competitions?.[0]?.odds?.[0]?.provider?.name;
- const keys=Object.keys(state.quoteHistory).filter(k=>k.startsWith(state.sport+':'+ev.id+':'));
- const key=keys.find(k=>k===state.sport+':'+ev.id+':'+provider)||keys[0];
- const points=key?state.quoteHistory[key]:[];
- const fields={winner:[['away_moneyline','Away moneyline'],['home_moneyline','Home moneyline']],spread:[['home_spread_line','Home spread / run line']],total:[['total','Game total']]};
- if(!fields[state.market])return '';
- let html='<article class="lh-v2-panel"><h2>Recorded sportsbook quote movement</h2><p>Scheduled ESPN observations · '+esc(key?.split(':').slice(2).join(':')||'no provider history')+'. First observed quote is not necessarily the opening line.</p>';
- for(const [field,label] of fields[state.market]){
- const rows=points.filter(p=>p[field]!=null&&p[field]!==''&&Number.isFinite(Number(p[field]))&&Number.isFinite(Date.parse(p.time)));
- if(rows.length<2){html+='<p>'+esc(label)+': Waiting for two verified observations. No movement inferred.</p>';continue}
- const vals=rows.map(p=>Number(p[field]));let lo=Math.min(...vals),hi=Math.max(...vals);const unchanged=lo===hi;if(unchanged){const pad=Math.max(1,Math.abs(lo)*0.02);lo-=pad;hi+=pad}const span=hi-lo,start=Date.parse(rows[0].time),end=Date.parse(rows.at(-1).time);
- const coordinates=rows.map(p=>(50+600*(Date.parse(p.time)-start)/Math.max(1,end-start))+','+(130-100*(Number(p[field])-lo)/span)).join(' ');
- html+='<h3>'+esc(label)+' · '+esc(vals[0])+' → '+esc(vals.at(-1))+'</h3><p>'+rows.length+' observations'+(unchanged?' · No change observed.':'.')+'</p><svg class="lh-v2-line" viewBox="0 0 700 175" role="img" aria-label="'+esc(label)+' recorded quotes over time"><text x="5" y="30" fill="#afcde2">'+esc(Number(hi.toFixed(2)))+'</text><text x="5" y="130" fill="#afcde2">'+esc(Number(lo.toFixed(2)))+'</text><polyline points="'+coordinates+'" fill="none" stroke="#40d7ff" stroke-width="3"/><text x="50" y="165" fill="#afcde2" font-size="16">'+esc(new Date(start).toLocaleString())+'</text><text x="650" y="165" text-anchor="end" fill="#afcde2" font-size="16">'+esc(new Date(end).toLocaleString())+'</text></svg>';
- }
- return html+'<p class="lh-v2-note">Observations may be delayed. Gaps are not continuous live tracking; changes do not prove large wagers.</p></article>';
+ const ev=selectedEvent(),q=quote();if(!ev)return '';const provider=q?.provider?.name;const key=state.sport+':'+ev.id+':'+provider;
+ const points=(state.quoteHistory[key]||[]).slice();
+ if(q&&state.scoreLoaded){const current={time:new Date(state.scoreLoaded).toISOString(),away_moneyline:q.moneyline?.away?.close?.odds??q.awayTeamOdds?.moneyLine,home_moneyline:q.moneyline?.home?.close?.odds??q.homeTeamOdds?.moneyLine,home_spread_line:q.pointSpread?.home?.close?.line,total:q.overUnder};points.push(current)}
+ const fields={winner:[['away_moneyline','Away moneyline','American odds',q?.moneyline?.away?.open?.odds],['home_moneyline','Home moneyline','American odds',q?.moneyline?.home?.open?.odds]],spread:[['home_spread_line','Home spread / run line',state.sport==='mlb'?'runs':'points',q?.pointSpread?.home?.open?.line]],total:[['total','Game total',state.sport==='mlb'?'runs':'points',typeof q?.total?.over?.open?.line==='string'?q.total.over.open.line.replace(/^[ou]/i,''):q?.total?.over?.open?.line]]};
+ if(!fields[state.market])return '<article class="lh-v2-panel"><h2>Sportsbook '+esc(marketLabel[state.market])+'</h2><p>No verified automated sportsbook feed for this market. See the separately labeled exchange alternative and game-scoped research tools in More.</p><p>Ticket and dollar-handle percentages: unavailable from the configured verified automated sources.</p></article>';
+ let html='<article class="lh-v2-panel"><h2>Sportsbook observations & movement</h2><p>'+esc(provider||'No verified provider')+' · ESPN; first observed is not necessarily market open.</p>';
+ if(!window.LHCharts)return html+'<p>Charts unavailable. Refresh to retry.</p></article>';
+ for(const [field,label,unit,open] of fields[state.market])html+=window.LHCharts.price({title:label,points:points.map(p=>({time:p.time,value:number(p[field])})),unit,source:'ESPN published quotes · '+(provider||'provider unavailable'),opening:number(open)!==null?{value:number(open)}:null,observedLabel:'Timestamped observations; close/latest fields may be delayed'});
+ const kickoff=Date.parse(ev.date),now=Date.now();const recent=points.filter(p=>Date.parse(p.time)>=now-900000&&Date.parse(p.time)<=now);
+ for(const [field,label,unit] of fields[state.market]){const timed=[...new Map(recent.filter(p=>number(p[field])!==null).map(p=>[p.time,p])).values()].sort((a,b)=>Date.parse(a.time)-Date.parse(b.time));html+='<p class="lh-v2-note">'+esc(label)+' · latest 15-minute observations: '+(timed.length>=2?esc(timed[0][field])+' at '+esc(new Date(timed[0].time).toLocaleTimeString())+' → '+esc(timed[timed.length-1][field])+' at '+esc(new Date(timed[timed.length-1].time).toLocaleTimeString())+' ('+esc(unit)+')':'insufficient distinct timed observations to quantify movement')+'.</p>'}
+ html+='<p class="lh-v2-note">Last 15 minutes: '+recent.length+' recorded quote observations'+(Number.isFinite(kickoff)&&now<kickoff?' · '+Math.ceil((kickoff-now)/60000)+' minutes until scheduled start':'')+'. Gaps are unobserved periods. A line change does not prove a particular wager.</p><p>Public split coverage, when verified, is shown in its own source-attributed panel. Missing percentages remain unavailable. Kalshi premium is never a substitute.</p>';
+ return html+'</article>';
 }
 async function loadReport(){
- const token=generation,sport=state.sport,selectionKey=state.selected;
- const ev=selectedEvent();if(!ev){state.report=null;state.reportEvent='';return}
- if(state.reportEvent===ev.id)return;
- state.report=null;state.reportEvent='';
- if(state.tab==='scores')render();
- try{const res=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+sportPaths[sport]+'/summary?event='+encodeURIComponent(ev.id),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!res.ok)throw Error('HTTP '+res.status);const report=await res.json();if(token!==generation||selectionKey!==state.selected)return;state.report=report;state.reportEvent=ev.id}catch(e){if(token!==generation||selectionKey!==state.selected)return;state.report={error:e.message}}render();
+ const token=generation,sport=state.sport,selectionKey=state.selected,ev=selectedEvent();if(!ev){state.report=null;state.reportEvent='';return}
+ if(state.reportEvent===ev.id)return;state.report=null;state.reportEvent='';state.reportLoaded=null;state.reportSource='';state.reportError='';render();
+ const url='https://site.api.espn.com/apis/site/v2/sports/'+sportPaths[sport]+'/summary?event='+encodeURIComponent(ev.id);
+ try{const r=await fetch(url,{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!r.ok)throw Error('HTTP '+r.status);const j=await r.json();if(token!==generation||selectionKey!==state.selected)return;if(j.header?.id&&String(j.header.id)!==String(ev.id))throw Error('Summary event identity mismatch');state.report=j;state.reportLoaded=Date.now();state.reportSource=url;state.reportEvent=ev.id}
+ catch(e){if(token!==generation||selectionKey!==state.selected)return;const saved=state.scoreSnapshot?.reports?.[sport+':'+ev.id];state.reportError='Direct report unavailable: '+e.message;if(saved?.report&&(!saved.report.header?.id||String(saved.report.header.id)===String(ev.id))){state.report=saved.report;state.reportLoaded=Date.parse(saved.collected_at);state.reportSource=saved.source;state.reportEvent=ev.id;state.reportError+=' · Showing dated scheduled fallback'}else state.report={error:state.reportError}}
+ render();
 }
 async function refresh(force=false){
  const token=++generation;
  $('lh-v2-status').textContent='Refreshing verified sources…';
- await loadHistory();if(token!==generation)return;await Promise.all([loadScores(force,token),loadTrade()]);if(token!==generation)return;renderPicker();render();
+ await Promise.all([loadHistory(token,force),loadSplits(token,force)]);if(token!==generation)return;await Promise.all([loadScores(force,token),loadTrade(token,force)]);if(token!==generation)return;renderPicker();render();
  if(force)state.reportEvent='';if(selectedEvent())await loadReport();
 }
+root.addEventListener('error',e=>{if(e.target.matches?.('img.lh-v2-teamlogo')){const span=document.createElement('span');span.className='lh-v2-placeholder';span.textContent=state.sport==='nba'?'🏀':state.sport==='mlb'?'⚾':'🏈';e.target.replaceWith(span)}},true);
 root.addEventListener('click',async e=>{
- const sport=e.target.closest('[data-lh-sport]');if(sport){state.sport=sport.dataset.lhSport;state.selected='';state.report=null;state.reportEvent='';await refresh(false);return}
- const market=e.target.closest('[data-lh-market]');if(market){state.market=market.dataset.lhMarket;render();return}
+ const sport=e.target.closest('[data-lh-sport]');if(sport){state.sport=sport.dataset.lhSport;state.selected='';state.provider='';state.contract='';state.events=[];state.report=null;state.reportEvent='';await refresh(false);return}
+ const market=e.target.closest('[data-lh-market]');if(market){state.market=market.dataset.lhMarket;state.contract='';render();return}
 });
-$('lh-v2-event').addEventListener('change',async e=>{state.selected=e.target.value;state.report=null;state.reportEvent='';render();if(selectedEvent())await loadReport()});
+$('lh-v2-event').addEventListener('change',async e=>{state.selected=e.target.value;state.provider='';state.contract='';state.report=null;state.reportEvent='';render();if(selectedEvent())await loadReport()});
 $('lh-v2-refresh').addEventListener('click',()=>refresh(true));
 document.querySelectorAll('.mobile-bottom button').forEach(b=>b.addEventListener('click',()=>{state.tab=b.dataset.screen;document.body.dataset.tab=state.tab;document.querySelectorAll('.mobile-bottom button').forEach(x=>{x.setAttribute('aria-pressed',String(x===b));if(x===b)x.setAttribute('aria-current','page');else x.removeAttribute('aria-current')});render();if(state.tab==='scores')loadReport()}));
+root.addEventListener('change',e=>{if(e.target.matches('[data-lh-contract]')){state.contract=e.target.value;render()}if(e.target.matches('[data-lh-provider]')){state.provider=e.target.value;render()}});
+let research=null;if(window.LHResearch)research=window.LHResearch.mount($('lh-v2-research'),{getContext:()=>({sport:state.sport,eventId:selectedEvent()?.id||state.selected,eventName:selection().title,market:state.market})});
 refresh(false);
-setInterval(()=>{if(document.visibilityState==='visible')refresh(true)},60000);
+setInterval(()=>{if(document.visibilityState==='visible')refresh(false)},60000);
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')refresh(false)});
 })();

@@ -1,0 +1,48 @@
+const fs=require('node:fs');
+const assert=require('node:assert/strict');
+const {JSDOM}=require('jsdom');
+const dom=new JSDOM('<!doctype html><body><div id="host"></div></body>',{url:'https://example.org/',runScripts:'outside-only'});
+const w=dom.window,downloads=[];w.Blob=Blob;w.URL.createObjectURL=blob=>{downloads.push(blob);return 'blob:qa'};w.URL.revokeObjectURL=()=>{};w.HTMLAnchorElement.prototype.click=function(){};
+w.eval(fs.readFileSync('research.js','utf8'));
+const valid={id:'qa',sport:'nfl',eventId:'1',eventName:'Away at Home',market:'winner',side:'Home',provider:'Manual source',received_at:'2026-10-19T21:00:00Z',published_at:null,odds:-110,line:null,handle_pct:null,ticket_pct:null,dollars:null,source_url:'https://example.org/source',note:'Notes'};
+for(const [key,value] of [['handle_pct',101],['ticket_pct',-1],['odds',0],['dollars',-1],['source_url','javascript:alert(1)'],['market','fake'],['line',NaN]])assert.throws(()=>w.LHResearch.validate({...valid,[key]:value}),key+' rejected');
+assert.equal(w.LHResearch.validate(valid).line,null,'Absent line remains null');
+let context={sport:'nfl',eventId:'1',eventName:'Away at Home'};
+const host=w.document.getElementById('host'),api=w.LHResearch.mount(host,{getContext:()=>context});
+assert.equal(w.LHResearch.mount(host),api,'Mount idempotence');
+const form=host.querySelector('form'),input=k=>form.querySelector('[name="'+k+'"]');
+input('side').value='=SUM(1,2)';input('provider').value='Manual source';input('note').value='<img src=x onerror=alert(1)>';
+input('handle_pct').value='70';input('ticket_pct').value='40';
+form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+assert.match(host.textContent,/Unverified entry saved/);assert.match(host.textContent,/Handle minus tickets: 30.0 percentage points/);
+assert(!host.querySelector('img'),'Stored note uses text, never HTML');
+const saved=JSON.parse(w.localStorage.getItem('lakehouse.research.v2'));
+assert.equal(saved.records.length,1);assert.equal(saved.records[0].line,null,'Blank form line stays unavailable');assert.equal(saved.records[0].dollars,null,'Blank dollars stays unavailable');
+context={sport:'nba',eventId:'2',eventName:'Other Game'};api.refreshContext();assert.equal(host.querySelectorAll('.lh-r-card').length,0,'Research is sport/game scoped');
+context={sport:'nfl',eventId:'1',eventName:'Away at Home'};api.refreshContext();assert.equal(host.querySelectorAll('.lh-r-card').length,1);
+input('odds').value='0';form.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert.match(host.textContent,/Not saved: American odds/);assert.equal(JSON.parse(w.localStorage.getItem('lakehouse.research.v2')).records.length,1,'Invalid submission cannot persist');
+host.querySelector('[data-action="csv"]').click();
+(async()=>{
+ const csv=await downloads.at(-1).text();assert(csv.includes('"\'=SUM(1,2)"'),'CSV neutralizes spreadsheet formulas');
+ host.querySelector('[data-action="json"]').click();const backup=JSON.parse(await downloads.at(-1).text());assert.equal(backup.version,2);assert.equal(backup.records.length,1);
+ const file=host.querySelector('[data-action="file"]');
+ async function importRecords(records){Object.defineProperty(file,'files',{configurable:true,value:[{size:100,text:async()=>JSON.stringify({version:2,records})}]});file.dispatchEvent(new w.Event('change',{bubbles:true}));await new Promise(r=>setTimeout(r,20));}
+ await importRecords(backup.records);assert.equal(JSON.parse(w.localStorage.getItem('lakehouse.research.v2')).records.length,1,'Import deduplicates identical IDs');
+ await importRecords([{...backup.records[0],note:'Conflicting edit'}]);assert.match(host.textContent,/Conflicting existing record ID/);assert.equal(JSON.parse(w.localStorage.getItem('lakehouse.research.v2')).records[0].note,'<img src=x onerror=alert(1)>','Conflicting import leaves prior entry untouched');
+ context={};api.refreshContext();assert(form.querySelector('[type="submit"]').disabled,'Game context required');
+ // Corrupt persisted research is preserved, not silently replaced during mount.
+ const corrupt='{"version":2,"records":"invalid"}';w.localStorage.setItem('lakehouse.research.v2',corrupt);
+ const other=w.document.createElement('div');w.document.body.append(other);w.LHResearch.mount(other,{getContext:()=>({sport:'nfl',eventId:'3',eventName:'Third Game'})});
+ assert.match(other.textContent,/could not be loaded/);assert.equal(w.localStorage.getItem('lakehouse.research.v2'),corrupt);
+ const otherForm=other.querySelector('form');otherForm.querySelector('[name="side"]').value='Home';otherForm.querySelector('[name="provider"]').value='Manual';
+ assert(otherForm.querySelector('[type="submit"]').disabled,'Damaged storage locks recording');otherForm.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));assert.equal(w.localStorage.getItem('lakehouse.research.v2'),corrupt,'Programmatic submission cannot overwrite damaged storage');
+ const otherFile=other.querySelector('[data-action="file"]');Object.defineProperty(otherFile,'files',{configurable:true,value:[{size:100,text:async()=>JSON.stringify(backup)}]});otherFile.dispatchEvent(new w.Event('change',{bubbles:true}));await new Promise(r=>setTimeout(r,20));assert.equal(w.localStorage.getItem('lakehouse.research.v2'),corrupt,'Import cannot overwrite damaged storage');
+ other.querySelector('[data-action="raw"]').click();assert.equal(JSON.parse(await downloads.at(-1).text()).raw,corrupt,'Raw export preserves original corrupt bytes');
+ w.localStorage.setItem('lh-money-snap-v1','legacy retained');w.confirm=()=>false;other.querySelector('[data-action="reset"]').click();assert.equal(w.localStorage.getItem('lakehouse.research.v2'),corrupt,'Declined reset preserves storage');
+ w.confirm=()=>true;other.querySelector('[data-action="reset"]').click();assert.equal(w.localStorage.getItem('lakehouse.research.v2'),null,'Confirmed reset removes only damaged v2 key');assert.equal(w.localStorage.getItem('lh-money-snap-v1'),'legacy retained');
+ const storageProto=Object.getPrototypeOf(w.localStorage),originalSet=storageProto.setItem;
+ storageProto.setItem=function(){throw Error('Quota exceeded')};
+ otherForm.dispatchEvent(new w.Event('submit',{bubbles:true,cancelable:true}));
+ assert.match(other.textContent,/Storage failed: Quota exceeded/);assert.equal(other.querySelectorAll('.lh-r-card').length,0,'Failed persistence does not claim a saved record');storageProto.setItem=originalSet;
+ w.close();console.log('PASS: manual evidence validation, scoped storage, unavailable numeric values, XSS escaping, CSV formula protection, JSON export/import deduplication, conflicts and form errors.');
+})().catch(e=>{console.error(e);w.close();process.exit(1)});

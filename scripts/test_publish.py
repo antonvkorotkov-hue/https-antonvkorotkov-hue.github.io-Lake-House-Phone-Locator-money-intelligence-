@@ -12,7 +12,7 @@ class PublishTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             os.chdir(folder)
             try:
-                for name in ['index.html','visual.js','visual.css','scoreboards.json','public-trades.json']:Path(name).write_bytes(b'verified')
+                for name in ['index.html','visual.js','visual.css','analytics.js','analytics.css','charts.js','charts.css','research.js','research.css','scoreboards.json','public-trades.json','sportsbook-splits.json','verification.html']:Path(name).write_bytes(b'verified')
                 def request(req,**kw):
                     url=req if isinstance(req,str) else req.full_url
                     method='GET' if isinstance(req,str) else req.get_method();calls.append((method,url))
@@ -24,6 +24,6 @@ class PublishTest(unittest.TestCase):
                 with patch.dict(os.environ,{'GITHUB_REPOSITORY':'test/app','GH_TOKEN':'test'}),patch('urllib.request.urlopen',request),patch('time.sleep'):runpy.run_path(str(SCRIPT))
                 self.assertIn(('POST','https://api.github.com/repos/test/app/pages/builds'),calls)
                 self.assertFalse(any('/deployments' in url for _,url in calls),'Never create competing Pages deployments')
-                self.assertEqual(sum(url.startswith('https://example.test/')for _,url in calls),5)
+                self.assertEqual(sum(url.startswith('https://example.test/')for _,url in calls),13)
             finally:os.chdir(prior)
 if __name__=='__main__':unittest.main()
