@@ -372,6 +372,31 @@ function renderTopExchangeSnapshot(doc){
  for(const [gameId,items] of groups){
   const wrap=document.createElement('article');wrap.className='gameflow';wrap.id='game-'+gameId.replace(/[^a-zA-Z0-9_-]/g,'');
   const heading=document.createElement('h3');heading.textContent=(items[0].event||gameId).split(':')[0].trim();wrap.append(heading);
+  const research=document.createElement('details');research.className='research-brief';research.style.display='block';research.style.margin='7px 0';
+  const trigger=document.createElement('summary');trigger.textContent='Maria: score, matchup & game research';research.append(trigger);
+  const result=document.createElement('div');result.textContent='Open to retrieve public game information.';research.append(result);wrap.append(research);
+  let loadedResearch=false;
+  research.addEventListener('toggle',async()=>{
+   if(!research.open||loadedResearch)return;loadedResearch=true;result.textContent='Checking ESPN for matching game…';
+   try{
+    const league=items[0].series.startsWith('KXCFB')?'college-football':'nfl';
+    const response=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/'+league+'/scoreboard',{cache:'no-store'});
+    if(!response.ok)throw Error('ESPN '+response.status);
+    const payload=await response.json();const gameCode=(gameId.match(/[A-Z]{4,7}$/)||[])[0]||'';
+    const matches=(payload.events||[]).filter(e=>{
+      const teams=e.competitions?.[0]?.competitors||[];
+      return teams.length===2&&teams.every(t=>gameCode.includes(t.team?.abbreviation||'--'));
+    });
+    if(!matches.length){result.textContent='No matching scoreboard event returned in this ESPN schedule window. Trade chart remains valid for its own recorded timestamps; no score, injury, or odds claim.';return}
+    const ev=matches[0],teams=ev.competitions?.[0]?.competitors||[];
+    result.replaceChildren();
+    const lead=document.createElement('p');lead.textContent=(ev.shortName||ev.name)+' • '+(ev.status?.type?.detail||'Schedule status unavailable')+' • '+teams.map(t=>(t.team?.abbreviation||'?')+' '+(t.score??'—')).join(' / ');result.append(lead);
+    const odds=ev.competitions?.[0]?.odds?.[0];
+    const p=document.createElement('p');p.textContent=odds?('Published market quote: '+(odds.details||'spread unavailable')+' • Game total '+(odds.overUnder??'unavailable')+' • '+(odds.provider?.name||'provider unspecified')):'No verified sportsbook quote supplied by scoreboard.';result.append(p);
+    const btn=document.createElement('button');btn.type='button';btn.textContent='Load team stats & player leaders';result.append(btn);
+    btn.addEventListener('click',async()=>{btn.disabled=true;btn.textContent='Loading report…';try{const res=await fetch('https://site.api.espn.com/apis/site/v2/sports/football/'+league+'/summary?event='+encodeURIComponent(ev.id),{cache:'no-store'});if(!res.ok)throw Error('HTTP '+res.status);const detail=await res.json();const rows=(detail.boxscore?.teams||[]).map(t=>(t.team?.displayName||'Team')+': '+(t.statistics||[]).filter(x=>x.label&&x.displayValue).slice(0,6).map(x=>x.label+' '+x.displayValue).join(' • '));const stats=document.createElement('p');stats.textContent=rows.join(' / ')||'No boxscore statistics available.';result.append(stats);btn.textContent='Report received';}catch(err){btn.textContent='Report unavailable: '+err.message}});
+   }catch(err){result.textContent='Game research unavailable: '+err.message}
+  });
   const controls=document.createElement('div');controls.className='gamecontrols';
   const cat=document.createElement('select');cat.setAttribute('aria-label','Bet category for '+gameId);
   const available=[...new Set(items.map(m=>m.series))];
