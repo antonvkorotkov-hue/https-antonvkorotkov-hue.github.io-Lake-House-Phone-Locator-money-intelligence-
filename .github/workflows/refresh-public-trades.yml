@@ -1,6 +1,10 @@
 name: Refresh public sports trades
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - 'scripts/collect_public.py'
+      - '.github/workflows/refresh-public-trades.yml'
   schedule:
     - cron: '*/10 * * * *'
 permissions:
