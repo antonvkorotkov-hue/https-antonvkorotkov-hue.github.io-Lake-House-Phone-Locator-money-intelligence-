@@ -6,9 +6,9 @@ const money=v=>Number.isFinite(Number(v))?'$'+Math.round(Number(v)).toLocaleStri
 const formatOdds=v=>v==null||v===''?'Unavailable':(Number(v)>0?'+':'')+String(v);
 const sportPaths={nfl:'football/nfl',college:'football/college-football',nba:'basketball/nba',mlb:'baseball/mlb'};
 let generation=0;
-const state={sport:'nfl',selected:'',market:'winner',events:[],markets:[],collected:null,scoreLoaded:null,tradeError:'',scoreError:'',report:null,reportEvent:'',scoresCache:{},quoteHistory:{},scoreSnapshot:null,tab:'games'};
+const state={sport:'nfl',selected:'',market:'winner',events:[],markets:[],collected:null,scoreLoaded:null,tradeError:'',collectorErrors:[],scoreError:'',report:null,reportEvent:'',scoresCache:{},quoteHistory:{},scoreSnapshot:null,tab:'games'};
 const root=document.createElement('section');root.id='lh-v2';root.className='lh-v2-root';
-root.innerHTML='<div class="lh-v2-head"><div><span class="lh-v2-eyebrow">LAKE HOUSE GAME CENTER</span><h1 id="lh-v2-page-title">Games</h1></div><button id="lh-v2-refresh" type="button" aria-label="Refresh current sports data">↻ Refresh</button></div><div class="lh-v2-sports" role="group" aria-label="Sports"><button data-lh-sport="nfl" aria-pressed="true">NFL</button><button data-lh-sport="college">College Football</button><button data-lh-sport="nba">NBA</button><button data-lh-sport="mlb">MLB</button></div><label class="lh-v2-selector-label" for="lh-v2-event">Selected matchup</label><select id="lh-v2-event" aria-label="Selected matchup"><option>Loading games…</option></select><div id="lh-v2-status" class="lh-v2-status" role="status"></div><div id="lh-v2-games" class="lh-v2-screen"></div><div id="lh-v2-trades" class="lh-v2-screen"></div><div id="lh-v2-scores" class="lh-v2-screen"></div><div id="lh-v2-more" class="lh-v2-screen"><article class="lh-v2-panel"><h2>Sources and limitations</h2><p>ESPN supplies public game scores and selected statistics and published quotes. Kalshi supplies public, sampled exchange trades. These are not a live feed of DraftKings wager amounts or private sportsbook transactions.</p><p>Unavailable odds, team totals, player props, injuries, and betting percentages are never estimated.</p></article></div>';
+root.innerHTML='<div class="lh-v2-head"><div><span class="lh-v2-eyebrow">LAKE HOUSE GAME CENTER</span><h1 id="lh-v2-page-title">Games</h1></div><button id="lh-v2-refresh" type="button" aria-label="Refresh current sports data">↻ Refresh</button></div><div class="lh-v2-sports" role="group" aria-label="Sports"><button data-lh-sport="nfl" aria-pressed="true">NFL</button><button data-lh-sport="college">College Football</button><button data-lh-sport="nba">NBA</button><button data-lh-sport="mlb">MLB</button></div><label class="lh-v2-selector-label" for="lh-v2-event">Selected matchup</label><select id="lh-v2-event" aria-label="Selected matchup"><option>Loading games…</option></select><div id="lh-v2-status" class="lh-v2-status" role="status"></div><div id="lh-v2-games" class="lh-v2-screen"></div><div id="lh-v2-trades" class="lh-v2-screen"></div><div id="lh-v2-scores" class="lh-v2-screen"></div><div id="lh-v2-more" class="lh-v2-screen"><article class="lh-v2-panel"><h2>Sources and limitations</h2><div id="lh-v2-source-status"></div><p>ESPN supplies public game scores and selected statistics and published quotes. Kalshi supplies public, sampled exchange trades. These are not a live feed of DraftKings wager amounts or private sportsbook transactions.</p><p>Unavailable odds, team totals, player props, injuries, and betting percentages are never estimated.</p></article></div>';
 const insertion=$('lhVisualHero')||$('gameMoney')||$('scoreboardSection');if(!insertion)return;
 insertion.parentNode.insertBefore(root,insertion);
 document.body.classList.add('lh-v2');
@@ -21,8 +21,11 @@ function selectedEvent(){return state.events.find(e=>'e:'+e.id===state.selected)
 function selectedMarketKey(){return state.selected.startsWith('m:')?state.selected.slice(2):''}
 function tickerGame(m){return String(m.ticker||'').split('-')[1]||''}
 function selectedMarkets(){
- const key=selectedMarketKey();if(key)return state.markets.filter(m=>tickerGame(m)===key);
- const ev=selectedEvent();if(!ev)return [];
+ const key=selectedMarketKey();if(key)return availableMarkets().filter(m=>tickerGame(m)===key);
+ return marketsForEvent(selectedEvent());
+}
+function marketsForEvent(ev){
+ if(!ev)return [];
  const pair=participants(ev),a=pair.away?.team?.abbreviation||'',h=pair.home?.team?.abbreviation||'';
  const aliases=x=>x==='WSH'||x==='WAS'?['WSH','WAS']:x==='JAX'||x==='JAC'?['JAX','JAC']:x==='LV'?['LV','LVR']:x==='LAR'?['LAR','LA']: [x];
  const day=new Date(ev.date);if(!a||!h||!Number.isFinite(day.getTime()))return [];
@@ -138,7 +141,7 @@ function renderPicker(){
  const el=$('lh-v2-event'),prior=state.selected;el.replaceChildren();
  for(const ev of state.events){const opt=document.createElement('option');opt.value='e:'+ev.id;opt.textContent=shortName(ev)+' · '+(ev.status?.type?.shortDetail||ev.status?.type?.description||'Scheduled');el.append(opt)}
  const group=groupMarketGames();
- for(const [key,ms] of group){if(state.events.some(e=>{const abbr=(e.competitions?.[0]?.competitors||[]).map(t=>t.team?.abbreviation||'');return abbr.every(a=>key.includes(a))}))continue;const opt=document.createElement('option');opt.value='m:'+key;opt.textContent=(ms[0].event||key).split(':')[0]+' · Exchange only';el.append(opt)}
+ for(const [key,ms] of group){if(state.events.some(e=>marketsForEvent(e).some(m=>tickerGame(m)===key)))continue;const opt=document.createElement('option');opt.value='m:'+key;opt.textContent=(ms[0].event||key).split(':')[0]+' · Exchange only';el.append(opt)}
  if([...el.options].some(o=>o.value===prior))state.selected=prior;
  else state.selected=el.options[0]?.value||'';
  el.value=state.selected;
@@ -151,9 +154,10 @@ function render(){
  $('lh-v2-games').innerHTML=hero()+marketTabs()+quoteMovement()+tradePanel()+priceBoard()+statsPanel()+analysis();
  $('lh-v2-trades').innerHTML=hero()+marketTabs()+quoteMovement()+tradePanel()+analysis();
  $('lh-v2-scores').innerHTML=scorePanel();
+ const diagnostics=$('lh-v2-source-status');if(diagnostics)diagnostics.innerHTML='<p>Scoreboard: '+esc(state.scoreLoaded?new Date(state.scoreLoaded).toLocaleString():'Unavailable')+'</p><p>Exchange snapshot: '+esc(state.collected?new Date(state.collected).toLocaleString():'Unavailable')+'</p><p>Browser refresh: every minute while visible. Scheduled collection: requested every 10 minutes; GitHub may delay runs.</p>'+((state.collectorErrors.length||state.scoreSnapshot?.errors?.length)?'<ul>'+[...state.collectorErrors,...(state.scoreSnapshot?.errors||[])].map(e=>'<li>'+esc(e)+'</li>').join('')+'</ul>':'<p>No errors reported by the loaded collector snapshots.</p>');
 }
 async function loadTrade(){
- try{const res=await fetch('./public-trades.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!res.ok)throw Error('HTTP '+res.status);const j=await res.json();state.markets=j.markets||[];state.collected=j.collected_at;state.tradeError=j.errors?.length?'Collector reports '+j.errors.length+' errors':''}catch(e){state.tradeError=e.message}
+ try{const res=await fetch('./public-trades.json?t='+Date.now(),{cache:'no-store',signal:AbortSignal.timeout(15000)});if(!res.ok)throw Error('HTTP '+res.status);const j=await res.json();state.markets=j.markets||[];state.collected=j.collected_at;state.collectorErrors=j.errors||[];state.tradeError=j.errors?.length?'Collector reports '+j.errors.length+' errors':''}catch(e){state.tradeError=e.message}
 }
 async function loadScores(force=false,token=generation){
  const sport=state.sport;
@@ -181,15 +185,15 @@ function quoteMovement(){
  const keys=Object.keys(state.quoteHistory).filter(k=>k.startsWith(state.sport+':'+ev.id+':'));
  const key=keys.find(k=>k===state.sport+':'+ev.id+':'+provider)||keys[0];
  const points=key?state.quoteHistory[key]:[];
- const fields={winner:[['away_moneyline','Away moneyline'],['home_moneyline','Home moneyline']],spread:[['spread','Home spread / run line']],total:[['total','Game total']]};
+ const fields={winner:[['away_moneyline','Away moneyline'],['home_moneyline','Home moneyline']],spread:[['home_spread_line','Home spread / run line']],total:[['total','Game total']]};
  if(!fields[state.market])return '';
  let html='<article class="lh-v2-panel"><h2>Recorded sportsbook quote movement</h2><p>Scheduled ESPN observations · '+esc(key?.split(':').slice(2).join(':')||'no provider history')+'. First observed quote is not necessarily the opening line.</p>';
  for(const [field,label] of fields[state.market]){
  const rows=points.filter(p=>p[field]!=null&&p[field]!==''&&Number.isFinite(Number(p[field]))&&Number.isFinite(Date.parse(p.time)));
  if(rows.length<2){html+='<p>'+esc(label)+': Waiting for two verified observations. No movement inferred.</p>';continue}
- const vals=rows.map(p=>Number(p[field])),lo=Math.min(...vals),hi=Math.max(...vals),span=hi-lo||2,start=Date.parse(rows[0].time),end=Date.parse(rows.at(-1).time);
+ const vals=rows.map(p=>Number(p[field]));let lo=Math.min(...vals),hi=Math.max(...vals);const unchanged=lo===hi;if(unchanged){const pad=Math.max(1,Math.abs(lo)*0.02);lo-=pad;hi+=pad}const span=hi-lo,start=Date.parse(rows[0].time),end=Date.parse(rows.at(-1).time);
  const coordinates=rows.map(p=>(50+600*(Date.parse(p.time)-start)/Math.max(1,end-start))+','+(130-100*(Number(p[field])-lo)/span)).join(' ');
- html+='<h3>'+esc(label)+' · '+esc(vals[0])+' → '+esc(vals.at(-1))+'</h3><svg class="lh-v2-line" viewBox="0 0 700 175" role="img" aria-label="'+esc(label)+' recorded quotes over time"><text x="5" y="30" fill="#afcde2">'+esc(hi)+'</text><text x="5" y="130" fill="#afcde2">'+esc(lo)+'</text><polyline points="'+coordinates+'" fill="none" stroke="#40d7ff" stroke-width="3"/><text x="50" y="165" fill="#afcde2" font-size="16">'+esc(new Date(start).toLocaleString())+'</text><text x="650" y="165" text-anchor="end" fill="#afcde2" font-size="16">'+esc(new Date(end).toLocaleString())+'</text></svg>';
+ html+='<h3>'+esc(label)+' · '+esc(vals[0])+' → '+esc(vals.at(-1))+'</h3><p>'+rows.length+' observations'+(unchanged?' · No change observed.':'.')+'</p><svg class="lh-v2-line" viewBox="0 0 700 175" role="img" aria-label="'+esc(label)+' recorded quotes over time"><text x="5" y="30" fill="#afcde2">'+esc(Number(hi.toFixed(2)))+'</text><text x="5" y="130" fill="#afcde2">'+esc(Number(lo.toFixed(2)))+'</text><polyline points="'+coordinates+'" fill="none" stroke="#40d7ff" stroke-width="3"/><text x="50" y="165" fill="#afcde2" font-size="16">'+esc(new Date(start).toLocaleString())+'</text><text x="650" y="165" text-anchor="end" fill="#afcde2" font-size="16">'+esc(new Date(end).toLocaleString())+'</text></svg>';
  }
  return html+'<p class="lh-v2-note">Observations may be delayed. Gaps are not continuous live tracking; changes do not prove large wagers.</p></article>';
 }

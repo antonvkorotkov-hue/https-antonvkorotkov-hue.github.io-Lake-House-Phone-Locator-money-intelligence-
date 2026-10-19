@@ -6,7 +6,7 @@ const http=require('node:http');
  const server=http.createServer((req,res)=>{const path=req.url.split('?')[0];const file=path==='/'?'index.html':path.slice(1);try{res.setHeader('Content-Type',file.endsWith('.js')?'application/javascript':file.endsWith('.css')?'text/css':file.endsWith('.json')?'application/json':'text/html');res.end(fs.readFileSync(file))}catch{res.writeHead(404);res.end()}}).listen(0,'127.0.0.1');
  const browser=await (process.env.WEBKIT?webkit:chromium).launch({headless:true});
  try{
- const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true});
+ const context=await browser.newContext({viewport:{width:390,height:844},isMobile:true,hasTouch:true,timezoneId:'America/New_York'});
  const page=await context.newPage(),errors=[];page.on('pageerror',e=>errors.push(e.message));
  const snapshot=JSON.parse(fs.readFileSync('scoreboards.json','utf8'));
  await page.route('https://**/*',async route=>{const url=route.request().url();const sport=url.includes('/college-football/')?'college':url.includes('/nba/')?'nba':url.includes('/mlb/')?'mlb':'nfl';if(url.includes('/scoreboard'))return route.fulfill({json:{events:snapshot.sports[sport].events}});if(url.includes('/summary?'))return route.fulfill({json:{boxscore:{teams:[]},leaders:[]}});return route.fulfill({json:{events:[],markets:[]}})});

@@ -94,3 +94,7 @@ body.lh-v2 header .tag{font-size:10px;max-width:126px;text-align:center;padding:
 .lh-v2-sports{overflow-x:auto}
 .lh-v2-sports button{flex:0 0 auto;min-height:44px}
 .lh-v2-market-tabs button{min-height:44px}
+
+body.lh-v2 #legacyQuoteHistory,body.lh-v2 #researchTools{display:none!important}
+body.lh-v2[data-tab="more"] #researchTools{display:block!important}
+body.lh-v2 .lh-v2-root{padding-bottom:20px}
