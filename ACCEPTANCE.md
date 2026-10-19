@@ -1,6 +1,6 @@
 # Lake House Picks — delivery acceptance
 
-Release ID: 2026-10-19-delivery-1. Existing repository: antonvkorotkov-hue/https-antonvkorotkov-hue.github.io-Lake-House-Phone-Locator-money-intelligence-. Baseline checked against remote before changes: 08fc724f22.
+Release ID: 2026-10-19-delivery-2. Existing repository: antonvkorotkov-hue/https-antonvkorotkov-hue.github.io-Lake-House-Phone-Locator-money-intelligence-. Baseline checked against remote before changes: 08fc724f22.
 
 Supported application behavior and unavailable external coverage are separate. PASS means the stated behavior was exercised, not that every sportsbook or game supplies that field. BLOCKED means missing source access/data or a test environment boundary. No forecast or guaranteed betting edge is claimed.
 
