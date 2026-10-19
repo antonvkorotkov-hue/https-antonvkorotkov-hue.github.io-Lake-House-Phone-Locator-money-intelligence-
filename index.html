@@ -264,10 +264,11 @@ async function readExchangeTrades(){
    const params=new URLSearchParams({ticker,limit:'1000'});if(cursor)params.set('cursor',cursor);
    const raw=await exchangeJSON('/markets/trades?'+params.toString());
    if(!Array.isArray(raw.trades))throw Error('Unexpected trades response');
-   for(const t of raw.trades){if(!seen.has(t.trade_id)){seen.add(t.trade_id);rawTrades.push(t)}}
+   for(const t of raw.trades){const id=t.trade_id||[t.created_time,t.yes_price_dollars,t.no_price_dollars,t.count_fp,t.taker_outcome_side].join('|');if(!seen.has(id)){seen.add(id);rawTrades.push(t)}}
    cursor=raw.cursor||'';pages++;
   }while(cursor&&pages<5);
   partial=Boolean(cursor);
+  if(!rawTrades.length){status.textContent='NO REPORTED TRADES';sum.textContent='The source returned zero transactions for '+ticker+'. This is not a verified zero-dollar market total.';exLast=Date.now();return}
   const trades=rawTrades.map(t=>{
    const side=t.taker_outcome_side||t.taker_side;
    const contracts=Number(t.count_fp??t.count),price=Number(side==='no'?(t.no_price_dollars??(t.no_price!=null?Number(t.no_price)/100:NaN)):(t.yes_price_dollars??(t.yes_price!=null?Number(t.yes_price)/100:NaN)));
