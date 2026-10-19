@@ -7,7 +7,7 @@ const {JSDOM}=require('jsdom');
 const dom=new JSDOM('<!doctype html><html><body data-tab="games"><header>Lake House Picks</header><div id="lhVisualHero"></div><nav class="mobile-bottom"><button data-screen="games">Games</button><button data-screen="money">Trades</button><button data-screen="scores">Scores</button><button data-screen="more">More</button></nav></body></html>',{url:'https://example.org/',runScripts:'outside-only'});
 const w=dom.window;
 const event={id:'1',shortName:'WSH @ SF',date:'2026-10-19T20:15:00Z',status:{type:{detail:'Scheduled',shortDetail:'8:15 PM'}},competitions:[{competitors:[{homeAway:'away',score:'0',team:{abbreviation:'WSH',shortDisplayName:'Commanders',logo:'https://a.espncdn.com/i/teamlogos/nfl/500/wsh.png'}},{homeAway:'home',score:'0',team:{abbreviation:'SF',shortDisplayName:'49ers',logo:'https://a.espncdn.com/i/teamlogos/nfl/500/sf.png'}}],odds:[{provider:{name:'Verified Test Book'},details:'SF -6.5',overUnder:47.5,homeTeamOdds:{moneyLine:-250},awayTeamOdds:{moneyLine:210}}]}]};
-const market={series:'KXNFLGAME',event:'Washington at San Francisco',ticker:'KXNFLGAME-26OCT19WASSF-SF',trades:[{id:'a',time:'2026-10-19T03:00:00Z',premium_usd:10},{id:'b',time:'2026-10-19T03:01:00Z',premium_usd:20}]};
+const market={series:'KXNFLGAME',event:'Washington at San Francisco',ticker:'KXNFLGAME-26OCT19WASSF-SF',trades:[{id:'a',time:'2026-10-19T03:00:00Z',premium_usd:10,contracts:20,side:'yes'},{id:'b',time:'2026-10-19T03:01:00Z',premium_usd:12,contracts:20,side:'yes'}]};
 const json={markets:[market],collected_at:new Date().toISOString(),errors:[]};
 w.fetch=async url=>{
 const address=String(url);
