@@ -124,6 +124,32 @@ async function fetchRealGames(){
    const status=document.createElement('small');status.textContent=event.status?.type?.detail||event.status?.type?.description||'Status not reported';card.append(status);
    const scores=document.createElement('div');scores.className='score';scores.textContent=sides.map(x=>(x.team?.abbreviation||'?')+' '+(x.score??'—')).join(' · ');card.append(scores);
    const insight=document.createElement('div');insight.className='research-brief';const active=event.status?.type?.state==='in';const home=sides.find(x=>x.homeAway==='home');const away=sides.find(x=>x.homeAway==='away');insight.textContent='MARIA • '+(home&&away?'Home: '+(home.team?.displayName||home.team?.abbreviation)+' · Away: '+(away.team?.displayName||away.team?.abbreviation)+'. ':'')+(active?'Game reported live. ':'')+'Score and clock are source observations, not a betting recommendation. Verified injuries, game-specific money splits, complete odds and a priced market edge are not connected for this game.';card.append(insight);
+   const detailsButton=document.createElement('button');detailsButton.type='button';detailsButton.textContent='Game stats, odds & players';detailsButton.style.marginTop='8px';
+   const detail=document.createElement('div');detail.className='research-brief';detail.hidden=true;
+   detailsButton.addEventListener('click',async()=>{
+     detail.hidden=false;detail.textContent='Loading verified game report…';
+     const sportPath=league==='nba'?'basketball/nba':league==='mlb'?'baseball/mlb':'football/'+league;
+     try{
+       const res=await fetch('https://site.api.espn.com/apis/site/v2/sports/'+sportPath+'/summary?event='+encodeURIComponent(event.id),{cache:'no-store'});
+       if(!res.ok)throw Error('ESPN summary HTTP '+res.status);
+       const report=await res.json();detail.replaceChildren();
+       const summary=document.createElement('div');
+       const rows=report.boxscore?.teams||[];
+       const segments=[];
+       for(const team of rows){
+         const stats=(team.statistics||[]).filter(x=>x.label&&x.displayValue).slice(0,9).map(x=>x.label+': '+x.displayValue);
+         if(stats.length)segments.push((team.team?.displayName||'Team')+' — '+stats.join(' · '));
+       }
+       const leaders=(report.leaders||[]).flatMap(team=>(team.leaders||[]).slice(0,3).map(group=>(team.team?.displayName||'Team')+' '+(group.displayName||group.name||'leader')+': '+(group.leaders||[]).slice(0,2).map(p=>p.athlete?.displayName+' '+(p.displayValue||'')).join(', '))).slice(0,6);
+       summary.textContent='MARIA • VERIFIED GAME DATA\n'+(segments.join('\n')||'No boxscore statistics provided.')+'\n'+(leaders.length?'Leaders: '+leaders.join(' · '):'Player leaders unavailable in this report.');
+       summary.style.whiteSpace='pre-line';detail.append(summary);
+       const odds=report.pickcenter||[];
+       const found=Array.isArray(odds)?odds[0]:null;
+       const line=document.createElement('p');line.textContent=found?('Published odds · '+(found.provider?.name||'Provider unspecified')+' · '+(found.details||'Spread unavailable')+' · Total '+(found.overUnder??'unavailable')):'No source-verified market odds returned for this game.';detail.append(line);
+       const injury=document.createElement('p');injury.textContent='Injury and starter status: not independently confirmed by this summary. Do not assume a player is active based on missing injury data.';detail.append(injury);
+       const stamp=document.createElement('small');stamp.textContent='ESPN game summary received '+new Date().toLocaleTimeString()+' · Source values only; no automatic winning pick';detail.append(stamp);
+     }catch(e){detail.textContent='Game report unavailable: '+e.message+'. No statistics or prices fabricated.'}
+   });card.append(detailsButton,detail);
    const stamp=document.createElement('small');stamp.textContent=event.date?'Scheduled '+new Date(event.date).toLocaleString():'';card.append(stamp);
    // Published bookmaker quotations, when present in the source game payload.
    // They are NOT DraftKings handle percentages or independent wagers.
