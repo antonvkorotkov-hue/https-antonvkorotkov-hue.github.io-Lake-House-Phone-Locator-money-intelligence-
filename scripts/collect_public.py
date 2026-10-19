@@ -25,6 +25,12 @@ def request(path, params):
     raise RuntimeError('Request retries exhausted')
 
 now = dt.datetime.now(UTC).isoformat()
+previous = {}
+try:
+    old = json.loads(Path("public-trades.json").read_text(encoding="utf-8"))
+    previous = {m["ticker"]: m for m in old.get("markets", []) if m.get("ticker")}
+except (OSError, ValueError, KeyError, TypeError):
+    pass
 results = []
 errors = []
 for series in SERIES:
@@ -50,13 +56,22 @@ for series in SERIES:
                         continue
                     sample.append({"id":trade.get("trade_id"),"time":trade.get("created_time"),"side":side,
                                    "contracts":count,"premium_usd":round(count*price,4)})
+                merged = {}
+                for item in previous.get(ticker, {}).get("trades", []) + sample:
+                    key = item.get("id") or "|".join(str(item.get(k)) for k in ("time", "side", "contracts", "premium_usd"))
+                    merged[key] = item
+                history = sorted(merged.values(), key=lambda t: t.get("time") or "")[-2000:]
                 results.append({"series":series,"event":event.get("title",event.get("event_ticker")),
                                 "ticker":ticker,"market":market.get("title",ticker),
-                                "trades":sample,"sample_limit":100,"complete_history":False})
+                                "trades":history,"sample_limit":100,"complete_history":False})
             except Exception as e:
                 errors.append(ticker + ": " + str(e)[:120])
     except Exception as e:
         errors.append(series + ": " + str(e)[:120])
+seen_tickers = {m["ticker"] for m in results}
+for ticker, old_market in previous.items():
+    if ticker not in seen_tickers and old_market.get("trades"):
+        results.append(old_market)
 payload = {"source":"Kalshi public API","collected_at":now,
            "measurement":"Sampled contract premium by taker outcome, not sportsbook handle or total game volume",
            "markets":results,"errors":errors}
