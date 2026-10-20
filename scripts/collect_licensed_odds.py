@@ -57,7 +57,7 @@ def collect(key,scoreboard,fetch=None):
             out['errors'].append(sport+': '+type(exc).__name__)
     return out
 if __name__=='__main__':
-    key=os.environ.get('LHP_ODDS_API_KEY','').strip()
+    key=(os.environ.get('LHP_ODDS_API_KEY') or os.environ.get('THE_ODDS_API_KEY') or '').strip()
     if not key:
         OUTPUT.write_text(json.dumps({'status':'not_configured','quotes':[],'source':'The Odds API v4','errors':[]},indent=2)+'\n')
     else:
