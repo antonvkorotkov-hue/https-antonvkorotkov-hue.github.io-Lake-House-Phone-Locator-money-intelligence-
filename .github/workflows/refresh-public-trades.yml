@@ -6,6 +6,7 @@ on:
       - 'scripts/collect_public.py'
       - 'scripts/collect_scores.py'
       - 'scripts/collect_splits.py'
+      - 'scripts/collect_licensed_odds.py'
   schedule:
     - cron: '*/10 * * * *'
 concurrency:
@@ -26,13 +27,17 @@ jobs:
         run: python scripts/collect_scores.py
       - name: Read legitimately public sportsbook split preview
         run: python scripts/collect_splits.py
+      - name: Collect licensed sportsbook quotes when configured
+        env:
+          LHP_ODDS_API_KEY: ${{ secrets.LHP_ODDS_API_KEY }}
+        run: python scripts/collect_licensed_odds.py
       - name: Read public market trades
         run: python scripts/collect_public.py
       - name: Publish only when updated
         run: |
           git config user.name "Lake House Data Bot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public-trades.json scoreboards.json sportsbook-splits.json
+          git add public-trades.json scoreboards.json sportsbook-splits.json licensed-odds.json
           if ! git diff --cached --quiet; then
             git commit -m "Update verified public trade snapshot"
             git pull --rebase origin main
