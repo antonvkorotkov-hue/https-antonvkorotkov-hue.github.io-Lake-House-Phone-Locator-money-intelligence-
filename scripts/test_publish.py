@@ -24,6 +24,6 @@ class PublishTest(unittest.TestCase):
                 with patch.dict(os.environ,{'GITHUB_REPOSITORY':'test/app','GH_TOKEN':'test'}),patch('urllib.request.urlopen',request),patch('time.sleep'):runpy.run_path(str(SCRIPT))
                 self.assertIn(('POST','https://api.github.com/repos/test/app/pages/builds'),calls)
                 self.assertFalse(any('/deployments' in url for _,url in calls),'Never create competing Pages deployments')
-                self.assertEqual(sum(url.startswith('https://example.test/')for _,url in calls),15)
+                self.assertEqual(sum(url.startswith('https://example.test/')for _,url in calls),16)
             finally:os.chdir(prior)
 if __name__=='__main__':unittest.main()
