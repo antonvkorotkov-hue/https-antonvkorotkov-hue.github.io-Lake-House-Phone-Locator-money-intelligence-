@@ -109,3 +109,5 @@ body.lh-v2[data-tab="more"] #researchTools{display:none!important}
 @media(max-width:700px){.lh-v2-market-tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px;overflow:visible}.lh-v2-market-tabs button{width:100%;min-width:0;white-space:normal}}
 
 .lh-v2-report-detail{border:1px solid #326282;border-radius:12px;margin:12px 0;padding:12px}.lh-v2-report-detail>summary{cursor:pointer;font-weight:700;min-height:44px;display:list-item;align-content:center}.lh-v2-move-digest{border-left:3px solid #3bbffa;padding:8px 12px;background:#0c293e;border-radius:8px}.lh-v2-move-digest p{margin:5px 0}
+
+.lh-v2-extra{margin:12px 0;border:1px solid #36627c;border-radius:12px;padding:0 10px;background:#10243a}.lh-v2-extra>summary{cursor:pointer;min-height:48px;padding:14px 4px;font-weight:750;color:#a9e1f1;font-size:.91rem}.lh-v2-extra>summary:focus-visible{outline:2px solid #64dfcf;outline-offset:2px}
