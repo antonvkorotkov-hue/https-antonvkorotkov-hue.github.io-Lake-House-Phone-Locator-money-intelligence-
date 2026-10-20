@@ -12,7 +12,7 @@ class PublishTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             os.chdir(folder)
             try:
-                for name in ['index.html','visual.js','visual.css','analytics.js','analytics.css','intelligence.js','intelligence.css','charts.js','charts.css','research.js','research.css','scoreboards.json','public-trades.json','sportsbook-splits.json','verification.html']:Path(name).write_bytes(b'verified')
+                for name in ['index.html','visual.js','visual.css','analytics.js','analytics.css','intelligence.js','intelligence.css','charts.js','charts.css','research.js','research.css','scoreboards.json','public-trades.json','sportsbook-splits.json','licensed-odds.json','verification.html']:Path(name).write_bytes(b'verified')
                 def request(req,**kw):
                     url=req if isinstance(req,str) else req.full_url
                     method='GET' if isinstance(req,str) else req.get_method();calls.append((method,url))
