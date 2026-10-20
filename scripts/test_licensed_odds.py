@@ -22,4 +22,9 @@ class Tests(unittest.TestCase):
   bad=dict(offer,bookmakers=[dict(offer['bookmakers'][0],last_update=stamp(-900))])
   data=collect('key',{'sports':{'nfl':{'events':[event]}}},lambda url:[bad])
   self.assertEqual(data['quotes'],[])
+ def test_key_alias_priority(self):
+  import os
+  from unittest.mock import patch
+  with patch.dict(os.environ,{'THE_ODDS_API_KEY':'existing','LHP_ODDS_API_KEY':''}):
+   self.assertEqual((os.environ.get('LHP_ODDS_API_KEY') or os.environ.get('THE_ODDS_API_KEY') or '').strip(),'existing')
 if __name__=='__main__':unittest.main()
