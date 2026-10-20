@@ -141,7 +141,7 @@ function render(){
  $('lh-v2-page-title').textContent=state.tab==='money'?'Trades':state.tab==='scores'?'Scores':state.tab==='more'?'More':'Games';
  $('lh-v2-status').textContent=(state.scoreError?'ESPN: '+state.scoreError+' · ':'')+(state.historyError?state.historyError+' · ':'')+(state.tradeError?'Trades: '+state.tradeError:'');
  document.querySelectorAll('[data-lh-sport]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.lhSport===state.sport)));
- $('lh-v2-games').innerHTML=hero()+independentPanel()+analysis()+marketTabs()+priceBoard('games')+quoteMovement()+splitPanel()+tradePanel('games')+'<details class="lh-v2-report-detail"><summary>Explore source statistics, players and availability</summary>'+analyticsPanel()+'</details>';
+ $('lh-v2-games').innerHTML=hero()+independentPanel()+analysis()+marketTabs()+priceBoard('games')+'<details class="lh-v2-extra"><summary>Line movement, public betting splits & exchange activity</summary>'+quoteMovement()+splitPanel()+tradePanel('games')+'</details>'+'<details class="lh-v2-report-detail"><summary>Explore source statistics, players and availability</summary>'+analyticsPanel()+'</details>';
  $('lh-v2-trades').innerHTML=hero()+marketTabs()+quoteMovement()+splitPanel()+tradePanel('trades')+analysis(true);
  $('lh-v2-scores').innerHTML=scorePanel();
  if(typeof research!=='undefined'&&research)research.refreshContext();
