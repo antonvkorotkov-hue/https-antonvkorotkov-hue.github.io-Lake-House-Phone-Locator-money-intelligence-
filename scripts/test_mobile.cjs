@@ -45,7 +45,7 @@ const path=require('node:path');
  assert.equal(await button.getAttribute('aria-pressed'),'true',sport+' '+market+' selected');
  if(['team','half','props'].includes(market)){
  const panel=page.locator('#lh-v2-'+id),hasExchange=await panel.locator('[data-lh-contract]').count();
- assert.match(await panel.innerText(),hasExchange?/Kalshi public exchange/i:/No verified feed|unavailable|No matching/i,hasExchange?'Verified exchange alternative is attributed':'Unconfigured feed is explicitly unavailable');
+ assert.match(await panel.textContent(),hasExchange?/Kalshi public exchange/i:/No verified feed|unavailable|No matching/i,hasExchange?'Verified exchange alternative is attributed':'Unconfigured feed is explicitly unavailable');
  }
  }
  assert(!/NaN|undefined|Invalid Date/.test(await page.locator('#lh-v2-'+id).innerText()),'No invalid generated values');
