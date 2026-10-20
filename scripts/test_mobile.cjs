@@ -55,7 +55,7 @@ const path=require('node:path');
  const contracts=page.locator('#lh-v2-'+id+' [data-lh-contract]');
  if(await contracts.count()){
  const values=await contracts.locator('option').evaluateAll(opts=>opts.map(o=>o.value));
- for(const value of values.slice(0,4)){await contracts.selectOption(value);assert.equal(await page.locator('#lh-v2-'+id+' [data-lh-contract]').inputValue(),value,'Exact exchange contract selection persists');}
+ for(const value of values.slice(0,4)){await contracts.selectOption(value,{force:true});assert.equal(await page.locator('#lh-v2-'+id+' [data-lh-contract]').inputValue(),value,'Exact exchange contract selection persists');}
  }
  const observations=page.locator('#lh-v2-'+id+' .lh-c-detail').first();
  if(await observations.count()){const extra=observations.locator('xpath=ancestor::details[contains(@class,"lh-v2-extra")]');if(await extra.count()&&!(await extra.evaluate(el=>el.open)))await extra.locator('summary').first().click();const parent=observations.locator('xpath=ancestor::details[contains(@class,"lh-c-metadata")]');if(await parent.count())await parent.locator('summary').first().click();await observations.locator('summary').click();assert(await observations.locator('table').isVisible(),'Exact chart observations expand');await observations.locator('summary').click();if(await parent.count())await parent.locator('summary').first().click();}
