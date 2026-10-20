@@ -13,6 +13,8 @@ for(const sport of ['nfl','college','nba','mlb']){
  assert(html.includes('Independent winner forecast unavailable'),'Absent predictor cannot be replaced with bookmaker favorite as forecast');
  assert(html.includes('Bookmaker market favorite:'),'Market leader is shown separately from independent prediction');
  assert(html.includes('Matchup evidence'),'Decision includes descriptive matchup evidence');
+ assert(html.includes('10-SECOND GAME BRIEF'),'Concise Maria summary is visible');
+ assert(html.includes('class="lh-i-deep"'),'Detailed analysis is collapsed');
  assert(html.includes('On-field comparison'),'Verified team comparison surfaced beside verdict');
  assert(html.includes('Recent scoring changes'),'Recent recorded scoring information is included in decision evidence');
  assert(html.includes('Observed evidence is descriptive'),'No inferred wagering edge from bare statistics');
