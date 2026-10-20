@@ -28,6 +28,8 @@ const q=id=>w.document.getElementById(id);
 assert.ok(q('lh-v2'),'Visual app mounts');
 assert.ok(q('lh-v2-games').querySelector('.lh-v2-hero'),'Games hero renders');
 assert.ok(q('lh-v2-games').querySelector('.lh-i-decision'),'Maria decision card renders on Games screen');
+assert.ok(q('lh-v2-games').querySelector('details.lh-v2-extra'),'Extended sportsbook and exchange analysis is collapsed by default');
+assert.ok(!q('lh-v2-games').querySelector('details.lh-v2-extra').open,'Expanded analysis starts closed');
 assert.ok(q('lh-v2-games').querySelector('.lh-i-decision').textContent.includes('NO BET'),'Unverified value produces a clear no-bet verdict');
 assert.ok(q('lh-v2-games').querySelector('.lh-c-headline'),'Price chart displays a compact observation summary');
 assert.ok(q('lh-v2-games').querySelector('.lh-c-metadata'),'Detailed price timestamps are collapsed');
