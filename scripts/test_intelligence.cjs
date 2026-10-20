@@ -14,6 +14,7 @@ for(const sport of ['nfl','college','nba','mlb']){
  assert(html.includes('Bookmaker market favorite:'),'Market leader is shown separately from independent prediction');
  assert(html.includes('Matchup evidence'),'Decision includes descriptive matchup evidence');
  assert(html.includes('On-field comparison'),'Verified team comparison surfaced beside verdict');
+ assert(html.includes('Recent scoring changes'),'Recent recorded scoring information is included in decision evidence');
  assert(html.includes('Observed evidence is descriptive'),'No inferred wagering edge from bare statistics');
  assert(a.projection.includes('unavailable'),'No invented score forecast/range');assert.equal(a.observedMarket.provider,'Source Book');
  assert.equal(a.observedMarket.sourceTime,null,'Retrieval time is not a source update time');assert.equal(a.quotes.length,0,'Recent retrieval does not establish current executable quote');
