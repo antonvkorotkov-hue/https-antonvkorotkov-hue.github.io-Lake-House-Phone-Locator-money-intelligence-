@@ -36,7 +36,7 @@ const path=require('node:path');
  const selectedId=(await page.locator('#lh-v2-event').inputValue()).slice(2),selectedGame=snapshot.sports[sport].events.find(e=>String(e.id)===selectedId);
  if((selectedGame?.competitions?.[0]?.status||selectedGame?.status)?.type?.state==='pre'){
  await page.waitForFunction(screenId=>document.querySelector('#lh-v2-'+screenId+' .lh-i-panel')?.textContent.includes('Published likely outcome'),id);
- const forecast=await page.locator('#lh-v2-'+id+' .lh-i-panel p').filter({hasText:'Published likely outcome:'}).innerText();assert(forecast.includes('60%')&&forecast.includes('40%'),'Source predictor percentages visible at '+width+'px '+sport+' '+tab);
+ const forecast=await page.locator('#lh-v2-'+id+' .lh-i-panel p').filter({hasText:'Published likely outcome:'}).textContent();assert(forecast.includes('60%')&&forecast.includes('40%'),'Source predictor percentages visible at '+width+'px '+sport+' '+tab);
  }
  }
  if(tab==='games'||tab==='money')for(const market of ['winner','spread','total','team','half','props']){
