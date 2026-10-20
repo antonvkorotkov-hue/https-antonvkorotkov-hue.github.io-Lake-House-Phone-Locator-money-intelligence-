@@ -1,7 +1,7 @@
 """Deterministic provider-match, timeliness, and market tests (no API calls)."""
 import datetime as dt
 import unittest
-from scripts.collect_licensed_odds import collect,match
+from collect_licensed_odds import collect,match
 now=dt.datetime.now(dt.timezone.utc)
 stamp=lambda n:(now+dt.timedelta(seconds=n)).isoformat()
 home='San Francisco 49ers';away='Washington Commanders'
