@@ -1,0 +1,6 @@
+# Private virtual sportsbook service (development only)
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+argon2-cffi>=23,<26
+pytest>=8,<10
+httpx>=0.27,<1
