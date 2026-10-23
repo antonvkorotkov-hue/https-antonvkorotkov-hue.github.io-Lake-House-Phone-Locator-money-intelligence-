@@ -9,6 +9,7 @@ from pathlib import Path
 
 from argon2 import PasswordHasher
 from fastapi import FastAPI, Header, HTTPException, Request, Response
+from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 DB_PATH = os.environ.get("LH_LEAGUE_DB", str(Path(__file__).parent / "league.sqlite3"))
@@ -248,3 +249,39 @@ if __name__ == "__main__":
     password = getpass.getpass("Admin password (12+ chars): ")
     bootstrap_admin(username, password)
     print("Administrator created. Configure HTTPS and LH_APP_ORIGIN before public exposure.")
+
+
+@app.get("/", response_class=HTMLResponse)
+def home():
+    """Serve the private league client from the API origin (never from public JSON)."""
+    return (Path(__file__).parent / "index.html").read_text(encoding="utf-8")
+
+
+@app.post("/api/logout")
+def logout(request: Request, response: Response, x_csrf_token: str | None = Header(None)):
+    require_mutation(request, x_csrf_token)
+    token = request.cookies.get("lh_session", "")
+    if token:
+        with db() as c:
+            c.execute("DELETE FROM sessions WHERE digest=?", (digest(token),))
+    response.delete_cookie("lh_session", path="/")
+    response.delete_cookie("lh_csrf", path="/")
+    return {"ok": True}
+
+
+@app.get("/api/leaderboard")
+def leaderboard(request: Request):
+    get_user(request)
+    with db() as c:
+        rows = c.execute("SELECT username, balance FROM users ORDER BY balance DESC, username LIMIT 200").fetchall()
+    return [{"username": r["username"], "balance_points": r["balance"] / 100} for r in rows]
+
+
+@app.get("/api/members")
+def members(request: Request):
+    u = get_user(request)
+    if u["role"] != "admin":
+        raise HTTPException(403, "Admin only")
+    with db() as c:
+        rows = c.execute("SELECT username,role,created_at FROM users ORDER BY id").fetchall()
+    return [dict(r) for r in rows]
