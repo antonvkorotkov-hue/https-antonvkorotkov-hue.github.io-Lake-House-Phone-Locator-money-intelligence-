@@ -51,7 +51,7 @@ Rules v1: full-game markets include overtime/extra innings; ties push for suppor
 ## Backup and recovery
 Use SQLite's backup API, not a plain copy of a live database/WAL. Private command:
 `python -m sportsbook_service.ops backup /private/backups/league-YYYYMMDD-HHMM.sqlite3`.
-A new backup is mode 0600 and integrity-checked. Schedule daily snapshots plus snapshots before migration, encrypt and transfer them to a separately authorized backup destination, retain versions and test restoration. The included package does not provision off-host storage or a scheduled backup job.
+A new backup is mode 0600 and integrity-checked. Schedule daily snapshots plus snapshots before migration, encrypt and transfer them to a separately authorized backup destination, retain versions and test restoration. The Compose backup worker creates a private snapshot at startup and daily thereafter in the private-backups volume. It does not prune backups or provision off-host storage; configure capacity alerts and an authorized encrypted off-host replication/retention policy before release.
 
 Restore while service/feeds are stopped: `python -m sportsbook_service.ops restore BACKUP NEW_DATABASE`. It refuses to overwrite a database. Verify restored balances/history and `PRAGMA integrity_check`, then point `LH_LEAGUE_DB` to the new file and restart. Treat restored session data as sensitive and revoke sessions after incident recovery. Back up the TLS volume/config separately. Never commit DBs, backups, invite/recovery codes or credentials.
 

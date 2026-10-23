@@ -1,7 +1,7 @@
 FROM python:3.12-slim
 WORKDIR /srv
 COPY sportsbook_service/requirements.txt /srv/requirements.txt
-RUN pip install --no-cache-dir -r /srv/requirements.txt && useradd --uid 10001 --create-home league && mkdir -p /data && chown league:league /data
+RUN pip install --no-cache-dir -r /srv/requirements.txt && useradd --uid 10001 --create-home league && mkdir -p /data /backups && chown league:league /data /backups
 COPY sportsbook_service /srv/sportsbook_service
 COPY scripts/collect_licensed_odds.py /srv/scripts/collect_licensed_odds.py
 USER league

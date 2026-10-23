@@ -30,6 +30,22 @@ services:
     tmpfs: [/tmp]
     security_opt: [no-new-privileges:true]
     cap_drop: [ALL]
+  backups:
+    build:
+      context: ..
+      dockerfile: sportsbook_service/Dockerfile
+    command: [python, -m, sportsbook_service.backup_worker]
+    restart: unless-stopped
+    environment:
+      LH_LEAGUE_DB: /data/league.sqlite3
+      LH_BACKUP_DIR: /backups
+    volumes:
+      - league-data:/data
+      - private-backups:/backups
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
   https:
     image: caddy:2
     restart: unless-stopped
@@ -42,5 +58,6 @@ services:
       - tls-config:/config
 volumes:
   league-data:
+  private-backups:
   tls-data:
   tls-config:
