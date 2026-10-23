@@ -41,11 +41,11 @@ else:
   status,data=call(c,jar,'login',{'username':name,'password':pw});check(status==200,'independent member login after redeploy')
 status,feed=call(friend,fj,'quotes');check(status==200,'real hosted sports feed retrieval')
 print(json.dumps({'events':len(feed.get('events',[])),'quotes':len(feed.get('quotes',[])),'available':sum(not q.get('unavailable_reason') for q in feed.get('quotes',[]))}),flush=True)
-if mode=='initial':
+if mode in ('initial','wager'):
  candidates=[q for q in feed.get('quotes',[]) if not q.get('unavailable_reason')]
  if candidates:
   body={'quote_id':candidates[0]['id'],'stake_points':1,'request_key':str(uuid.uuid4())}
-  status,pick=call(friend,fj,'picks',body);check(status==200,'real source-backed virtual wager accepted')
+  status,pick=call(friend,fj,'picks',body);print(json.dumps({'wager_status':status,'detail':pick.get('detail')}),flush=True);check(status==200,'real source-backed virtual wager accepted')
   status,again=call(friend,fj,'picks',body);check(status==200 and again.get('duplicate'),'accepted wager retry is idempotent')
  else:print('LIMITATION No fresh authorized quote available; no fake wager substituted',flush=True)
 status,picks=call(friend,fj,'picks');check(status==200,'private member wager history')
@@ -56,3 +56,9 @@ status,report=call(owner,oj,'admin');check(status==200 and report['ledger_sum']=
 third,tj=client();status,data=call(third,tj,'login',{'username':a['friend_username'],'password':a['friend_password']});check(status==200,'new session independent-device equivalent login')
 status,same=call(third,tj,'picks');check(status==200 and [p['id'] for p in same]==[p['id'] for p in picks],'accepted picks synchronized between sessions')
 print(json.dumps({'mode':mode,'friend_pick_count':len(picks),'house_outstanding_points':report['outstanding_return_points'],'ledger_sum':report['ledger_sum']}),flush=True)
+
+if mode=='persistent_cleanup':
+ status,members=call(owner,oj,'members');check(status==200,'owner member administration')
+ for member in members:
+  if member['username'] in (a['friend_username'],a['second_username']):
+   status,data=call(owner,oj,'members/'+member['id'],{'enabled':False,'reason':'Automated acceptance account retired; records retained','request_key':str(uuid.uuid4())});check(status==200,'QA account disabled with audit history retained')
