@@ -1,0 +1,36 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync,readdirSync} from 'node:fs';
+import {api,grade,hash} from '../lib/sportsbook.mjs';
+const sqlite=new DatabaseSync(':memory:');for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sqlite.exec(readFileSync('drizzle/'+f,'utf8'));
+function stmt(sql){let args=[];return {bind(...a){args=a;return this},async first(){return sqlite.prepare(sql).get(...args)||null},async all(){return {results:sqlite.prepare(sql).all(...args)}},async run(){return sqlite.prepare(sql).run(...args)}}}
+const db={prepare:stmt,async batch(commands){sqlite.exec('BEGIN IMMEDIATE');try{const results=[];for(const s of commands)results.push(await s.run());sqlite.exec('COMMIT');return results}catch(e){sqlite.exec('ROLLBACK');throw e}}};
+const env={DB:db,SB_SETUP_SECRET:'test-only-bootstrap-secret'};let requests=0;
+async function call(path,body,cookies='',csrf=''){const headers={'cf-connecting-ip':String(++requests),'Origin':'https://unit.test'};if(cookies)headers.Cookie=cookies;if(csrf)headers['X-CSRF-Token']=csrf;if(path==='setup')headers['X-Setup-Secret']=env.SB_SETUP_SECRET;return api(new Request('https://unit.test/api/sportsbook/'+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body)}),env)}
+function auth(r){const cookies=r.headers.getSetCookie();return {cookie:cookies.map(v=>v.split(';')[0]).join('; '),csrf:cookies.find(v=>v.startsWith('lh_csrf=')).split(';')[0].slice(8)}}
+let r=await call('setup',{username:'anton',password:'test-owner-password-123'});assert.equal(r.status,200);
+assert.equal((await call('setup',{username:'other',password:'test-owner-password-123'})).status,403);
+r=await call('login',{username:'anton',password:'test-owner-password-123'});assert.equal(r.status,200);const owner=auth(r);
+r=await call('invites',{starting_points:1000},owner.cookie,owner.csrf);const code=(await r.json()).invitation_code;
+r=await call('join',{username:'friend',password:'test-friend-password-123',invite:code});assert.equal(r.status,200);const friend=auth(r);
+assert.equal((await call('admin',undefined,friend.cookie)).status,403);assert.equal((await call('invites',{},friend.cookie,friend.csrf)).status,403);
+assert.equal((await call('invites',{},owner.cookie)).status,403);
+assert.equal((await call('join',{username:'other',password:'test-friend-password-123',invite:code})).status,400);
+const t=Math.floor(Date.now()/1000);sqlite.prepare("INSERT INTO sb_events VALUES('e','nfl','Away @ Home',?,'scheduled','fixture',?,'{}')").run(t+3600,t);sqlite.prepare("INSERT INTO sb_quotes VALUES('q','e','moneyline','Home',100,NULL,'home',NULL,'full','fixture',?,?,?,?,0,0,1)").run(t,t,t+120,t+3600);
+const pick={quote_id:'q',stake_points:100,request_key:'unit-retry-key-123'};
+r=await call('picks',pick,friend.cookie,friend.csrf);assert.equal(r.status,200);assert.equal((await call('picks',pick,friend.cookie,friend.csrf)).status,200);
+assert.equal((await (await call('me',undefined,friend.cookie)).json()).balance_points,900);assert.equal((await (await call('me',undefined,owner.cookie)).json()).balance_points,1000);
+assert.equal((await (await call('picks',undefined,owner.cookie)).json()).length,0);
+assert.equal((await call('picks',{...pick,stake_points:101},friend.cookie,friend.csrf)).status,409);
+assert.equal((await call('picks',{...pick,request_key:'new-retry-key-123',stake_points:1000},friend.cookie,friend.csrf)).status,409);
+assert.equal((await call('picks',{...pick,user_id:'owner'},friend.cookie,friend.csrf)).status,422);
+sqlite.prepare('UPDATE sb_quotes SET suspended=1').run();assert.equal((await call('picks',{...pick,request_key:'suspended-pick-123'},friend.cookie,friend.csrf)).status,409);
+const f=(await (await call('members',undefined,owner.cookie)).json()).find(u=>u.username==='friend');
+r=await call('members/'+f.id+'/recovery',{},owner.cookie,owner.csrf);const recovery=(await r.json()).recovery_code;
+assert.equal((await call('recover',{username:'friend',password:'recovered-friend-password',code:recovery})).status,200);
+assert.equal((await call('me',undefined,friend.cookie)).status,401);assert.equal((await call('recover',{username:'friend',password:'recovered-friend-password',code:recovery})).status,400);
+r=await call('login',{username:'friend',password:'recovered-friend-password'});const again=auth(r);assert.equal((await (await call('me',undefined,again.cookie)).json()).balance_points,900);
+assert.equal((await call('members/'+f.id,{enabled:false,reason:'test disable',request_key:'disable-test-key-123'},owner.cookie,owner.csrf)).status,200);assert.equal((await call('me',undefined,again.cookie)).status,401);
+const before=sqlite.prepare('SELECT count(*) n FROM sb_postings').get().n;assert.equal(sqlite.prepare('SELECT sum(delta) n FROM sb_postings').get().n,0);assert(before>0);
+for(const [q,res,expected] of [[{market:'spread',side:'home',line:-10,period:'full'},{state:'final',scores:{home:20,away:10}},'push'],[{market:'total',side:'under',line:31,period:'full'},{state:'final',scores:{home:20,away:10}},'win'],[{market:'moneyline',side:'home',period:'full'},{state:'cancelled'},'void'],[{market:'player_prop',side:'over',line:20,subject:'p',period:'full'},{state:'final',props:{}},null]])assert.equal(grade(q,res),expected);
+console.log('PASS: real migration/API tests — sole owner, invitations, sessions, isolation, retries, balance protection, disabling, recovery, CSRF and ledger invariants; grading cases.');
