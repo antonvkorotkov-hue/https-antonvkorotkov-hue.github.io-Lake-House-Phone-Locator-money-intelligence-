@@ -1,0 +1,8 @@
+# Versions exercised by the backend tests. No credentials belong here.
+fastapi==0.161.1
+starlette==1.9.0
+uvicorn==0.54.0
+argon2-cffi==25.1.0
+pytest==9.1.1
+httpx==0.28.1
+pydantic==2.14.0

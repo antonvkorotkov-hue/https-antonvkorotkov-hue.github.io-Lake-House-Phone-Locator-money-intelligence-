@@ -1,0 +1,26 @@
+name: Sites sportsbook invariants
+on:
+  push:
+    branches: [feature/private-virtual-sportsbook]
+    paths: ['sportsbook_sites/**', '.github/workflows/sites-sportsbook.yml']
+  pull_request:
+    paths: ['sportsbook_sites/**', '.github/workflows/sites-sportsbook.yml']
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python scripts/test-ledger.py
+        working-directory: sportsbook_sites
+      - run: node scripts/test-sportsbook.mjs
+        working-directory: sportsbook_sites
+      - run: node --check lib/sportsbook-feeds.mjs
+        working-directory: sportsbook_sites
