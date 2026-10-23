@@ -1,0 +1,6 @@
+{$LH_HOSTNAME} {
+    request_body {
+        max_size 16KB
+    }
+    reverse_proxy league:8000
+}

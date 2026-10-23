@@ -1,0 +1,46 @@
+# Run from repository root: docker compose --env-file /private/league.env -f sportsbook_service/compose.yaml up -d
+# Host needs an HTTPS hostname and inbound ports 80/443. Never expose port 8000.
+services:
+  league:
+    build:
+      context: ..
+      dockerfile: sportsbook_service/Dockerfile
+    restart: unless-stopped
+    environment: &league-env
+      LH_LEAGUE_DB: /data/league.sqlite3
+      LH_APP_ORIGIN: https://${LH_HOSTNAME:?Set LH_HOSTNAME}
+      LH_PREGAME_ODDS_AUTHORIZED: ${LH_PREGAME_ODDS_AUTHORIZED:-0}
+      LHP_ODDS_API_KEY: ${LHP_ODDS_API_KEY:-}
+    volumes:
+      - league-data:/data
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  feeds:
+    build:
+      context: ..
+      dockerfile: sportsbook_service/Dockerfile
+    command: [python, -m, sportsbook_service.feeds]
+    restart: unless-stopped
+    environment: *league-env
+    volumes:
+      - league-data:/data
+    read_only: true
+    tmpfs: [/tmp]
+    security_opt: [no-new-privileges:true]
+    cap_drop: [ALL]
+  https:
+    image: caddy:2
+    restart: unless-stopped
+    ports: ["80:80", "443:443"]
+    environment:
+      LH_HOSTNAME: ${LH_HOSTNAME}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - tls-data:/data
+      - tls-config:/config
+volumes:
+  league-data:
+  tls-data:
+  tls-config:
