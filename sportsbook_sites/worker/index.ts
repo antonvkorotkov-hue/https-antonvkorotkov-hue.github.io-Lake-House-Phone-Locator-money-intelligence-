@@ -1,4 +1,5 @@
 import { refresh, publicMarkets } from "../lib/sportsbook-feeds.mjs";
+import { api } from "../lib/sportsbook.mjs";
 import legacy from "../lib/legacy-picks.js";
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
@@ -7,14 +8,19 @@ import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 const worker = {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     const url=new URL(request.url),path=url.pathname;
-    // Research and virtual picks share confirmed sports prices, not user data.
-    if(path==="/api/board"&&request.method==="GET"){
-      const sport=({NFL:'nfl',NCAAF:'college',NBA:'nba',MLB:'mlb'} as Record<string,string>)[url.searchParams.get('sport')||'NFL'];
-      if(sport){
-        const [response]=await Promise.all([legacy.fetch(request,env,ctx),refresh(env,sport).catch(()=>console.error('Sportsbook market refresh failed'))]);
-        const data=await response.json();
-        return Response.json({...data,virtualMarkets:await publicMarkets(env,sport)},{status:response.status,headers:response.headers});
-      }
+    // Fast sports-price endpoint: account-independent and separate from research.
+    if(path==="/api/markets"&&request.method==="GET"){
+      const requested=url.searchParams.get('sport')||'NFL';
+      const sport=({NFL:'nfl',NCAAF:'college',NBA:'nba',MLB:'mlb',nfl:'nfl',college:'college',nba:'nba',mlb:'mlb'} as Record<string,string>)[requested];
+      if(!sport)return Response.json({detail:'Unknown sport'},{status:422});
+      const data=await publicMarkets(env,sport);
+      ctx.waitUntil(refresh(env,sport).catch(()=>console.error('Sportsbook market refresh failed')));
+      return Response.json(data,{headers:{'Cache-Control':'no-store'}});
+    }
+    if(path==="/api/sportsbook/quotes"&&request.method==="GET"){
+      const response=await api(request,env);
+      if(response.ok)ctx.waitUntil(refresh(env,url.searchParams.get('sport')||'').catch(()=>console.error('Sportsbook market refresh failed')));
+      return response;
     }
     if(path!=="/sportsbook"&&!path.startsWith("/sportsbook-assets/")&&!path.startsWith("/api/sportsbook/")&&!path.startsWith("/_")){
       const response=await legacy.fetch(request,env,ctx);
