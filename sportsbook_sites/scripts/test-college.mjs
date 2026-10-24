@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import {api,now,quoteReason} from '../lib/sportsbook.mjs';
-import {offers,espnEvents,eventMatches,collegeLeagues,refresh} from '../lib/sportsbook-feeds.mjs';
+import {offers,espnEvents,eventMatches,collegeLeagues,refresh,publicMarkets,american} from '../lib/sportsbook-feeds.mjs';
 
 // Provider-shaped fixtures, never inserted into production or presented as real odds.
 const sqlite=new DatabaseSync(':memory:');
@@ -19,23 +19,23 @@ assert(!eventMatches({...provider,date:new Date((event.starts_at+181)*1000).toIS
 assert(!eventMatches({...provider,home:'Michigan'},event));
 assert.deepEqual(collegeLeagues([{name:'USA - NCAA',slug:'verified-ncaa'},{name:'USA NFL',slug:'usa-nfl'}]),['verified-ncaa']);
 assert.throws(()=>collegeLeagues([{name:'USA NFL',slug:'usa-nfl'}]),/no college/);
+const unchangedAt=new Date((now()-3600)*1000).toISOString();
 const snapshot=()=>({...provider,bookmakers:{DraftKings:[
- {name:'ML',updatedAt:new Date().toISOString(),odds:[{home:'1.90',away:'2.10'}]},
- {name:'Spread',updatedAt:new Date().toISOString(),odds:[{hdp:-3.5,home:'1.91',away:'1.91'}]},
- {name:'Totals',updatedAt:new Date().toISOString(),odds:[{max:48.5,over:'1.95',under:'1.85'}]}
+ {name:'ML',updatedAt:unchangedAt,odds:[{home:'1.90',away:'2.10'}]},
+ {name:'Spread',updatedAt:unchangedAt,odds:[{hdp:-3.5,home:'1.91',away:'1.91'}]},
+ {name:'Totals',updatedAt:unchangedAt,odds:[{max:48.5,over:'1.95',under:'1.85'}]}
 ]}});
-assert.equal(offers(snapshot(),event,env).length,6);
+assert.equal(offers(snapshot(),event,env).length,6);assert.equal(american('100.00'),9900);const capped=snapshot();capped.bookmakers.DraftKings[0].odds[0].max=500;assert.equal(offers(capped,event,env).find(q=>q.market==='moneyline').line,null);
 const parsed=offers(snapshot(),event,env);assert.equal(parsed.find(q=>q.market==='spread'&&q.side==='away').line,'3.5');
 for(const [mutate,reason] of [
  [m=>delete m.updatedAt,'timestamp missing'],
- [m=>m.updatedAt=new Date((now()-121)*1000).toISOString(),'120-second'],
  [m=>m.updatedAt=new Date((now()+10)*1000).toISOString(),'future'],
  [m=>m.suspended=true,'suspended'],
  [m=>m.odds[0].suspended=true,'suspended']
 ]){const p=snapshot(),reasons={};p.bookmakers.DraftKings.forEach(mutate);assert.equal(offers(p,event,env,reasons).length,0);assert(Object.keys(reasons).some(k=>k.includes(reason)));}
 const live={...event,state:'live'};let reasons={};assert.equal(offers(snapshot(),live,env,reasons).length,0);assert(Object.keys(reasons).some(k=>k.includes('authorization')));
 assert.equal(offers(snapshot(),live,{...env,SB_LIVE_ODDS_AUTHORIZED:'1'}).length,6);
-const staleLive=snapshot();staleLive.bookmakers.DraftKings.forEach(m=>m.updatedAt=new Date((now()-16)*1000).toISOString());assert.equal(offers(staleLive,live,{...env,SB_LIVE_ODDS_AUTHORIZED:'1'}).length,0);
+const unchangedLive=offers(snapshot(),live,{...env,SB_LIVE_ODDS_AUTHORIZED:'1'});assert.equal(unchangedLive.length,6);assert.equal(unchangedLive[0].source_at,Math.floor(Date.parse(unchangedAt)/1000));assert(unchangedLive[0].expires_at<=now()+15);assert.match(quoteReason({...unchangedLive[0],received_at:now()-16},live),/expired/);
 let mode='fresh',requests=[];
 const originalFetch=globalThis.fetch;
 globalThis.fetch=async input=>{
@@ -56,6 +56,8 @@ globalThis.fetch=async input=>{
 };
 await refresh(env,'college');assert.equal(sqlite.prepare('SELECT count(*) n FROM sb_quotes WHERE suspended=0').get().n,6);
 let diagnostic=JSON.parse(sqlite.prepare('SELECT payload FROM sb_feed_diagnostics').get().payload);assert.deepEqual(diagnostic.leagues,['verified-ncaa']);assert.equal(diagnostic.matched_events,1);assert.equal(diagnostic.quotes,6);
+const originalQuote=sqlite.prepare('SELECT * FROM sb_quotes LIMIT 1').get();sqlite.prepare('UPDATE sb_quotes SET received_at=?,expires_at=?').run(now()-200,now()-1);sqlite.prepare("UPDATE sb_config SET value=0 WHERE key='feed_refresh_college'").run();await refresh(env,'college');const reconfirmed=sqlite.prepare('SELECT * FROM sb_quotes WHERE id=?').get(originalQuote.id);assert.equal(reconfirmed.source_at,originalQuote.source_at);assert(reconfirmed.expires_at>now());assert(reconfirmed.received_at>now()-2);
+const publicFeed=await publicMarkets(env,'college');assert.equal(publicFeed.quotes.length,6);assert(publicFeed.quotes.every(q=>!('user_id' in q)&&!('request_key' in q)));
 const count=requests.length;await refresh(env,'college');assert.equal(requests.length,count,'ten-second shared refresh lease');
 let ip=0;
 async function call(path,body,auth={}){const headers={Origin:'https://fixture.test','cf-connecting-ip':String(++ip)};if(auth.cookie)headers.Cookie=auth.cookie;if(auth.csrf)headers['X-CSRF-Token']=auth.csrf;if(path==='setup')headers['X-Setup-Secret']=env.SB_SETUP_SECRET;return api(new Request('https://fixture.test/api/sportsbook/'+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body)}),env)}
@@ -87,5 +89,5 @@ assert.match(quoteReason({...parsed[0],expires_at:now()-1},event),/expired/);
 assert.equal((await (await call('picks',undefined,friend)).json()).length,1);
 assert.equal(sqlite.prepare('SELECT sum(delta) n FROM sb_postings').get().n,0);
 globalThis.fetch=originalFetch;
-console.log('PASS college feed integration: discovered league, ESPN scope, team aliases, exact two-team/time matching, all 3 markets, timestamps, live authorization, 10s lease, suspension/removal and provider errors.');
+console.log('PASS college feed integration: discovered league, ESPN scope, team aliases, exact two-team/time matching, all 3 markets, original last-change timestamps plus fresh snapshot confirmation, live authorization, 10s lease, suspension/removal and provider errors.');
 console.log('PASS college account API: 25-point pick saved once, 1000 → 975, retry unchanged, history and new-session persistence, expired/suspended odds rejected; balanced ledger. Fixture-only, not live provider/iPhone certification.');
