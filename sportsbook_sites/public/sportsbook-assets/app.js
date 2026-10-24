@@ -85,3 +85,5 @@ setInterval(()=>{if(!$('#league').classList.contains('hide'))estimate()},1000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('#league').classList.contains('hide')&&!$('#markets').classList.contains('hide'))loadQuotes().catch(e=>msg(e.message,true))});
 guestView();refresh().catch(e=>{guestView();msg(e.message,true);loadQuotes().catch(err=>msg(err.message,true))});
 })();
+
+if('serviceWorker' in navigator)navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
