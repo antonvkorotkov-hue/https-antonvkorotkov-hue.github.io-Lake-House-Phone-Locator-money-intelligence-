@@ -1,22 +1,131 @@
 import {all,one,hash,now,settle} from './sportsbook.mjs';
 const sports={nfl:['football/nfl','american-football','usa-nfl'],college:['football/college-football','american-football','usa-ncaa'],nba:['basketball/nba','basketball','usa-nba'],mlb:['baseball/mlb','baseball','usa-mlb']};
-const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+export const norm=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&/g,'and').replace(/\bst\.?$/,'state').replace(/[^a-z0-9]/g,'');
 const time=s=>{const t=Date.parse(s);return Number.isFinite(t)?Math.floor(t/1000):null};
 const prepare=(db,sql,args=[])=>db.prepare(sql).bind(...args);
-async function get(url){const r=await fetch(url,{signal:AbortSignal.timeout(8000),headers:{'User-Agent':'LakeHouseVirtualSportsbook'}});if(!r.ok)throw Error('Sports provider unavailable');return r.json()}
+async function get(url){
+ const r=await fetch(url,{signal:AbortSignal.timeout(8000),headers:{'User-Agent':'LakeHouseVirtualSportsbook'}});
+ if(!r.ok)throw Error((url.includes('espn.com')?'ESPN':'Odds-API.io')+' HTTP '+r.status+(r.status===429?' (rate limited)':r.status===401||r.status===403?' (key or subscription access denied)':''));
+ return r.json();
+}
+export function eventMatches(offer,event){
+ const details=JSON.parse(event.payload),start=time(offer.date||offer.startsAt||offer.startTime);
+ return start!==null&&Math.abs(event.starts_at-start)<=180&&['home','away'].every(side=>
+  (details.aliases?.[side]||[details.teams[side]]).map(norm).includes(norm(offer[side])));
+}
+export function collegeLeagues(rows){
+ if(!Array.isArray(rows))throw Error('Odds-API.io league discovery returned an invalid response');
+ const result=rows.filter(r=>typeof r.slug==='string'&&/ncaa|ncaaf|college|\bfbs\b|\bfcs\b/i.test(r.name+' '+r.slug)).map(r=>r.slug);
+ if(!result.length)throw Error('Odds-API.io lists no college football league for american-football');
+ return [...new Set(result)];
+}
+let leagueCache;
+async function leaguesFor(sport,apiSport,league,key){
+ if(sport!=='college')return [league];
+ if(leagueCache&&leagueCache.until>now())return leagueCache.leagues;
+ const rows=await get('https://api.odds-api.io/v3/leagues?'+new URLSearchParams({apiKey:key,sport:apiSport}));
+ const leagues=collegeLeagues(rows);leagueCache={leagues,until:now()+3600};return leagues;
+}
+export function espnEvents(board,sport,url){
+ const result=[];
+ for(const raw of board.events||[]){
+  const competition=raw.competitions?.[0],competitors=competition?.competitors||[];
+  const teams=Object.fromEntries(competitors.map(t=>[t.homeAway,t.team?.displayName]));
+  const start=time(competition?.date||raw.date);if(!teams.home||!teams.away||start===null)continue;
+  const status=competition?.status||raw.status;
+  let state={pre:'scheduled',in:'live',post:'final'}[status?.type?.state]||'unavailable';
+  for(const closed of ['postponed','cancelled','canceled','suspended','delayed'])if(String(status?.type?.name).toLowerCase().includes(closed))state=closed;
+  const aliases=Object.fromEntries(competitors.map(({homeAway,team})=>[homeAway,[team.displayName,team.shortDisplayName,team.location,team.abbreviation].filter(Boolean)]));
+  const details={teams,aliases,scores:Object.fromEntries(competitors.map(t=>[t.homeAway,t.score])),clock:status?.displayClock,period:status?.period,status:status?.type?.detail,timestamp_note:'ESPN retrieval timestamp; event update time not supplied'};
+  result.push({id:sport+':'+raw.id,sport,matchup:teams.away+' @ '+teams.home,starts_at:start,state,source:url,source_at:now(),payload:JSON.stringify(details)});
+ }
+ return result;
+}
+
 export function american(value){const n=Number(value);if(!Number.isFinite(n))return null;if(Number.isInteger(n)&&Math.abs(n)>=100&&Math.abs(n)<=100000)return n;if(n>1&&n<=1001)return Math.round(n>=2?(n-1)*100:-100/(n-1));return null}
 const propStats=[[/passing yards/i,'passing:yards'],[/rushing yards/i,'rushing:yards'],[/receiving yards/i,'receiving:yards'],[/receptions/i,'receiving:receptions'],[/player points/i,'basketball:points'],[/player rebounds/i,'basketball:rebounds'],[/player assists/i,'basketball:assists']];
-export function offers(payload,event,env){const out=[],details=JSON.parse(event.payload),teams=details.teams;for(const [book,markets] of Object.entries(payload.bookmakers||{})){if(!/^(DraftKings|Draft Kings|FanDuel)$/i.test(book)||!Array.isArray(markets))continue;for(const m of markets){if(m.suspended===true||m.status==='suspended')continue;const sourceAt=time(m.updatedAt);if(!sourceAt||sourceAt>now()||sourceAt<now()-120)continue;const name=String(m.name||'');let market,period='full',subject=null;const half=/1st half|first half|half 1|\bh1\b/i.test(name),base=name.replace(/1st half|first half|half 1|\bh1\b/ig,'').trim();if(half){if(event.sport==='mlb'||(event.state==='live'&&Number(details.period)>2))continue;period='first_half';market='first_half'}else if(/^team total (home|away)$/i.test(base)){market='team_total';subject=/home/i.test(base)?'home':'away'}else if(/^(ml|moneyline|money line|winner|match result)$/i.test(base))market='moneyline';else if(/^(spread|handicap|run line)$/i.test(base))market='spread';else if(/^(game total|total|totals|over\/under)$/i.test(base))market='total';else if(propStats.some(([re])=>re.test(base)))market='player_prop';else continue;
+export function offers(payload,event,env,reasons={}){const reject=reason=>{reasons[reason]=(reasons[reason]||0)+1};const out=[],details=JSON.parse(event.payload),teams=details.teams;for(const [book,markets] of Object.entries(payload.bookmakers||{})){if(!/^(DraftKings|Draft Kings|FanDuel)$/i.test(book)||!Array.isArray(markets))continue;for(const m of markets){if(m.suspended===true||/suspended|closed|inactive/i.test(String(m.status||''))){reject('Market suspended by provider');continue}const sourceAt=time(m.updatedAt);if(!sourceAt){reject('Provider market timestamp missing or invalid');continue}if(sourceAt>now()){reject('Provider market timestamp is in the future');continue}if(sourceAt<now()-120){reject('Provider market timestamp exceeds 120-second prematch freshness limit');continue}const name=String(m.name||'');let market,period='full',subject=null;const half=/1st half|first half|half 1|\bh1\b/i.test(name),base=name.replace(/1st half|first half|half 1|\bh1\b/ig,'').trim();if(half){if(event.sport==='mlb'||(event.state==='live'&&Number(details.period)>2))continue;period='first_half';market='first_half'}else if(/^team total (home|away)$/i.test(base)){market='team_total';subject=/home/i.test(base)?'home':'away'}else if(/^(ml|moneyline|money line|winner|match result)$/i.test(base))market='moneyline';else if(/^(spread|handicap|run line)$/i.test(base))market='spread';else if(/^(game total|total|totals|over\/under)$/i.test(base))market='total';else if(propStats.some(([re])=>re.test(base)))market='player_prop';else continue;
  const isSpread=/spread|handicap|run line/i.test(base),isTotal=/total|over\/under/i.test(base),isMl=/^(ml|moneyline|money line|winner|match result)$/i.test(base);if(half&&!isSpread&&!isTotal&&!isMl)continue;
- for(const row of m.odds||[]){const lineRaw=row.hdp??row.max??row.point??row.line;const line=lineRaw==null?null:Number(lineRaw);if(line!==null&&!Number.isFinite(line))continue;let sub=subject;if(market==='player_prop'){const player=String(row.player||row.playerName||row.label||m.player||'').trim();const stat=propStats.find(([re])=>re.test(base))?.[1];if(!player||!stat)continue;sub=player+'|'+stat}
- for(const side of ['home','away','over','under']){if(row[side]==null)continue;if((market==='team_total'||market==='total'||market==='player_prop'||isTotal)&&!['over','under'].includes(side))continue;if((market==='moneyline'||market==='spread'||isMl||isSpread)&&!['home','away'].includes(side))continue;if((market==='spread'||isSpread||isTotal||['team_total','total','player_prop'].includes(market))&&line===null)continue;const odds=american(row[side]);if(odds===null)continue;const live=event.state==='live';if(live&&(env.SB_LIVE_ODDS_AUTHORIZED!=='1'||sourceAt<now()-15))continue;const adjusted=(market==='spread'||isSpread)&&side==='away'?-line:line;const selection=(sub?(market==='team_total'?teams[sub]:sub.split('|')[0])+' ':'')+(['home','away'].includes(side)?teams[side]:side)+(adjusted!==null?' '+adjusted:'');const source='Odds-API.io / '+book;const key=hash(JSON.stringify([event.id,market,period,selection,odds,adjusted,sourceAt,source]));out.push({id:key,event_id:event.id,market,selection,odds,line:adjusted===null?null:String(adjusted),side,subject:sub,period,source,source_at:sourceAt,received_at:now(),expires_at:sourceAt+(live?15:120),closes_at:live?sourceAt+15:event.starts_at,live:Number(live),suspended:0,licensed:Number(env.SB_ODDS_AUTHORIZED==='1')})}
+ for(const row of m.odds||[]){if(row.suspended===true||/suspended|closed|inactive/i.test(String(row.status||''))){reject('Selection suspended by provider');continue}const lineRaw=row.hdp??row.max??row.point??row.line;const line=lineRaw==null?null:Number(lineRaw);if(line!==null&&!Number.isFinite(line))continue;let sub=subject;if(market==='player_prop'){const player=String(row.player||row.playerName||row.label||m.player||'').trim();const stat=propStats.find(([re])=>re.test(base))?.[1];if(!player||!stat)continue;sub=player+'|'+stat}
+ for(const side of ['home','away','over','under']){if(row[side]==null)continue;if((market==='team_total'||market==='total'||market==='player_prop'||isTotal)&&!['over','under'].includes(side))continue;if((market==='moneyline'||market==='spread'||isMl||isSpread)&&!['home','away'].includes(side))continue;if((market==='spread'||isSpread||isTotal||['team_total','total','player_prop'].includes(market))&&line===null)continue;const odds=american(row[side]);if(odds===null)continue;const live=event.state==='live';if(live&&env.SB_LIVE_ODDS_AUTHORIZED!=='1'){reject('Live odds authorization is not enabled');continue}if(live&&sourceAt<now()-15){reject('Provider market timestamp exceeds 15-second live freshness limit');continue}const adjusted=(market==='spread'||isSpread)&&side==='away'?-line:line;const selection=(sub?(market==='team_total'?teams[sub]:sub.split('|')[0])+' ':'')+(['home','away'].includes(side)?teams[side]:side)+(adjusted!==null?' '+adjusted:'');const source='Odds-API.io / '+book;const key=hash(JSON.stringify([event.id,market,period,selection,odds,adjusted,sourceAt,source]));out.push({id:key,event_id:event.id,market,selection,odds,line:adjusted===null?null:String(adjusted),side,subject:sub,period,source,source_at:sourceAt,received_at:now(),expires_at:sourceAt+(live?15:120),closes_at:live?sourceAt+15:event.starts_at,live:Number(live),suspended:0,licensed:Number(env.SB_ODDS_AUTHORIZED==='1')})}
  }
  }}return out}
-export async function refresh(env){const db=env.DB;if(!db)return;const lease=await prepare(db,"INSERT INTO sb_config(key,value) VALUES('feed_refresh',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<? RETURNING value",[now(),now()-30]).first();if(!lease)return;
- await Promise.all(Object.entries(sports).map(async([sport,[path,apiSport,league]])=>{const url='https://site.api.espn.com/apis/site/v2/sports/'+path+'/scoreboard';try{const board=await get(url);const events=[];for(const raw of board.events||[]){const competitors=raw.competitions?.[0]?.competitors||[],teams=Object.fromEntries(competitors.map(t=>[t.homeAway,t.team?.displayName]));if(!teams.home||!teams.away||!time(raw.date))continue;let state={pre:'scheduled',in:'live',post:'final'}[raw.status?.type?.state]||'unavailable';for(const closed of ['postponed','cancelled','suspended','delayed'])if(String(raw.status?.type?.name).toLowerCase().includes(closed))state=closed;const details={teams,scores:Object.fromEntries(competitors.map(t=>[t.homeAway,t.score])),clock:raw.status?.displayClock,period:raw.status?.period,status:raw.status?.type?.detail,timestamp_note:'ESPN retrieval timestamp; event update time not supplied'};const event={id:sport+':'+raw.id,sport,matchup:teams.away+' @ '+teams.home,starts_at:time(raw.date),state,source:url,source_at:now(),payload:JSON.stringify(details)};events.push(event);await prepare(db,'INSERT INTO sb_events VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET matchup=excluded.matchup,starts_at=excluded.starts_at,state=excluded.state,source_at=excluded.source_at,payload=excluded.payload',Object.values(event)).run()}
- if(env.ODDS_API_IO_KEY&&env.SB_ODDS_AUTHORIZED==='1'){const params=new URLSearchParams({apiKey:env.ODDS_API_IO_KEY,sport:apiSport,league});const providerEvents=await get('https://api.odds-api.io/v3/events?'+params);const matches=[];for(const offer of Array.isArray(providerEvents)?providerEvents:[]){const start=time(offer.date||offer.startsAt||offer.startTime);if(!start)continue;const matched=events.filter(e=>{const teams=JSON.parse(e.payload).teams;return norm(offer.home)===norm(teams.home)&&norm(offer.away)===norm(teams.away)&&Math.abs(e.starts_at-start)<=180});if(matched.length===1&&['scheduled','live'].includes(matched[0].state))matches.push({providerId:String(offer.id),event:matched[0]})}for(let i=0;i<matches.length;i+=10){const group=matches.slice(i,i+10),q=new URLSearchParams({apiKey:env.ODDS_API_IO_KEY,eventIds:group.map(m=>m.providerId).join(','),bookmakers:'DraftKings,FanDuel'});const snapshots=await get('https://api.odds-api.io/v3/odds/multi?'+q);for(const match of group){const snapshot=(Array.isArray(snapshots)?snapshots:[]).find(s=>String(s.id)===match.providerId);const commands=[prepare(db,'UPDATE sb_quotes SET suspended=1 WHERE event_id=?',[match.event.id])];if(snapshot){for(const quote of offers(snapshot,match.event,env)){commands.push(prepare(db,'INSERT INTO sb_quotes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET suspended=0,received_at=excluded.received_at',Object.values(quote)))}}await db.batch(commands)}}}
- }catch{/* Never extend event or quote freshness after a failed retrieval. */}}));
- await refreshResults(env);
+export async function refresh(env,selected=''){
+ const db=env.DB;if(!db)return;
+ const entries=Object.entries(sports).filter(([sport])=>!selected||selected===sport);
+ await Promise.all(entries.map(async([sport,[path,apiSport,league]])=>{
+  const lease=await prepare(db,"INSERT INTO sb_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<? RETURNING value",['feed_refresh_'+sport,now()+120,now()-10]).first();
+  if(!lease)return;
+  const diagnostic={sport,checked_at:now(),espn_events:0,provider_events:0,matched_events:0,quotes:0,leagues:[],rejections:{},events:{},reason:null};
+  let stage='ESPN scoreboard';
+  try{
+   const url='https://site.api.espn.com/apis/site/v2/sports/'+path+'/scoreboard?'+new URLSearchParams(sport==='college'?{groups:'80',limit:'1000'}:{limit:'1000'});
+   const board=await get(url);if(!Array.isArray(board.events))throw Error('Invalid ESPN scoreboard response');
+   const events=espnEvents(board,sport,url);diagnostic.espn_events=events.length;
+   for(const event of events){
+    await prepare(db,'INSERT INTO sb_events VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET matchup=excluded.matchup,starts_at=excluded.starts_at,state=excluded.state,source_at=excluded.source_at,payload=excluded.payload',Object.values(event)).run();
+    diagnostic.events[event.id]={markets:{},reason:['scheduled','live'].includes(event.state)?'No matching Odds-API.io event with both teams and kickoff within 3 minutes':'ESPN event is '+event.state};
+   }
+   if(!events.length)throw Error('ESPN returned no games for this scoreboard date');
+   if(!env.ODDS_API_IO_KEY)throw Error('Odds-API.io key is not configured');
+   if(env.SB_ODDS_AUTHORIZED!=='1')throw Error('Odds-API.io market usage authorization is not enabled');
+   stage='Odds-API.io league mapping';
+   diagnostic.leagues=await leaguesFor(sport,apiSport,league,env.ODDS_API_IO_KEY);
+   stage='Odds-API.io events';
+   const providerById=new Map();
+   for(const slug of diagnostic.leagues){
+    for(let skip=0;skip<5000;skip+=1000){
+     const params=new URLSearchParams({apiKey:env.ODDS_API_IO_KEY,sport:apiSport,league:slug,limit:'1000',skip:String(skip)});
+     const rows=await get('https://api.odds-api.io/v3/events?'+params);
+     if(!Array.isArray(rows))throw Error('Invalid provider events response');
+     for(const row of rows)providerById.set(String(row.id),row);
+     if(rows.length<1000)break;
+    }
+   }
+   const providerEvents=[...providerById.values()];diagnostic.provider_events=providerEvents.length;
+   if(!providerEvents.length)throw Error('Provider returned no events for '+diagnostic.leagues.join(', '));
+   const candidates=[];
+   for(const offer of providerEvents){
+    const matched=events.filter(e=>eventMatches(offer,e));
+    if(matched.length===1&&['scheduled','live'].includes(matched[0].state))candidates.push({providerId:String(offer.id),event:matched[0],offer});
+   }
+   const matches=candidates.filter(m=>candidates.filter(x=>x.event.id===m.event.id).length===1);
+   for(const m of candidates)if(!matches.includes(m))diagnostic.events[m.event.id].reason='Ambiguous provider event mapping; no price accepted';
+   diagnostic.matched_events=matches.length;
+   stage='Odds-API.io market snapshots';
+   for(let i=0;i<matches.length;i+=10){
+    const group=matches.slice(i,i+10),q=new URLSearchParams({apiKey:env.ODDS_API_IO_KEY,eventIds:group.map(m=>m.providerId).join(','),bookmakers:'DraftKings,FanDuel'});
+    const snapshots=await get('https://api.odds-api.io/v3/odds/multi?'+q);
+    if(!Array.isArray(snapshots))throw Error('Invalid provider odds response');
+    for(const match of group){
+     const detail=diagnostic.events[match.event.id],snapshot=snapshots.find(s=>String(s.id)===match.providerId);
+     const commands=[prepare(db,'UPDATE sb_quotes SET suspended=1 WHERE event_id=?',[match.event.id])];
+     let quotes=[];const reasons={};
+     if(/settled|completed|finished|final|cancelled|canceled|suspended|postponed/i.test(String(match.offer.status||'')))detail.reason='Provider event is '+match.offer.status;
+     else if(!snapshot)detail.reason='Provider returned no odds snapshot for matched event';
+     else if(!eventMatches({...match.offer,...snapshot},match.event))detail.reason='Provider snapshot teams or kickoff do not match ESPN';
+     else if(/settled|completed|finished|final|cancelled|canceled|suspended|postponed/i.test(String(snapshot.status||'')))detail.reason='Provider snapshot is '+snapshot.status;
+     else{
+      quotes=offers(snapshot,match.event,env,reasons);
+      detail.reason=quotes.length?null:Object.keys(reasons).join('; ')||'DraftKings/FanDuel returned no supported moneyline, spread or total prices';
+      for(const quote of quotes){
+       detail.markets[quote.market]=(detail.markets[quote.market]||0)+1;
+       commands.push(prepare(db,'INSERT INTO sb_quotes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET suspended=0,received_at=excluded.received_at',Object.values(quote)));
+      }
+     }
+     detail.rejections=reasons;
+     for(const [reason,count] of Object.entries(reasons))diagnostic.rejections[reason]=(diagnostic.rejections[reason]||0)+count;
+     diagnostic.quotes+=quotes.length;await db.batch(commands);
+    }
+   }
+   if(!diagnostic.quotes)diagnostic.reason=Object.keys(diagnostic.rejections).join('; ')||(!matches.length?'No unambiguous provider/ESPN event match':'Matched games have no supported available markets');
+  }catch(error){diagnostic.reason=stage+': '+(error.name==='TimeoutError'?'request timed out':error.message);}
+  await prepare(db,'INSERT INTO sb_feed_diagnostics(sport,payload) VALUES(?,?) ON CONFLICT(sport) DO UPDATE SET payload=excluded.payload',[sport,JSON.stringify(diagnostic)]).run();
+  await prepare(db,'UPDATE sb_config SET value=? WHERE key=?',[now(),'feed_refresh_'+sport]).run();
+ }));
+ // Final-result lookups share a separate lease; selecting a sport must not fan out settlement requests every ten seconds.
+ const resultsLease=await prepare(db,"INSERT INTO sb_config(key,value) VALUES('result_refresh',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<? RETURNING value",[now(),now()-60]).first();
+ if(resultsLease)await refreshResults(env);
 }
 export async function refreshResults(env){const db=env.DB;const pending=await all(db,`SELECT DISTINCT e.* FROM sb_events e JOIN sb_picks p ON p.event_id=e.id WHERE p.status='pending' OR e.starts_at>? LIMIT 12`,[now()-7*86400]);for(const e of pending){try{const path=sports[e.sport][0],rawId=e.id.split(':')[1],summaryUrl='https://site.api.espn.com/apis/site/v2/sports/'+path+'/summary?event='+rawId;const summary=await get(summaryUrl);if(String(summary.header?.id)!==rawId)continue;const comp=summary.header.competitions?.[0],status=comp?.status?.type;if(!comp||!status)continue;const details=JSON.parse(e.payload),teams=Object.fromEntries(comp.competitors.map(t=>[t.homeAway,t.team?.displayName]));if(norm(teams.home)!==norm(details.teams.home)||norm(teams.away)!==norm(details.teams.away))continue;let result=null;if(status.completed===true&&status.state==='post'){const date=new Date(e.starts_at*1000).toISOString().slice(0,10).replaceAll('-','');const board=await get('https://site.api.espn.com/apis/site/v2/sports/'+path+'/scoreboard?dates='+date);const other=board.events?.find(x=>String(x.id)===rawId);if(other?.status?.type?.completed!==true)continue;const scores=Object.fromEntries(comp.competitors.map(t=>[t.homeAway,Number(t.score)])),second=Object.fromEntries((other.competitions?.[0]?.competitors||[]).map(t=>[t.homeAway,Number(t.score)]));if(!['home','away'].every(k=>Number.isFinite(scores[k])&&scores[k]===second[k]))continue;result={state:'final',scores,verification:'ESPN scoreboard and summary agree'};const half={};for(const t of comp.competitors){const lines=t.linescores;if(Array.isArray(lines)&&lines.length>=2&&lines.slice(0,2).every(x=>Number.isFinite(x.value)))half[t.homeAway]=lines[0].value+lines[1].value}if(Object.keys(half).length===2)result.first_half=half;
  // Props settle only from explicit final box-score statistics, never name-based guesses.

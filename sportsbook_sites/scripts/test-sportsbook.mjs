@@ -5,7 +5,7 @@ import {api,grade,hash} from '../lib/sportsbook.mjs';
 const sqlite=new DatabaseSync(':memory:');for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sqlite.exec(readFileSync('drizzle/'+f,'utf8'));
 function stmt(sql){let args=[];return {bind(...a){args=a;return this},async first(){return sqlite.prepare(sql).get(...args)||null},async all(){return {results:sqlite.prepare(sql).all(...args)}},async run(){return sqlite.prepare(sql).run(...args)}}}
 const db={prepare:stmt,async batch(commands){sqlite.exec('BEGIN IMMEDIATE');try{const results=[];for(const s of commands)results.push(await s.run());sqlite.exec('COMMIT');return results}catch(e){sqlite.exec('ROLLBACK');throw e}}};
-const env={DB:db,SB_SETUP_SECRET:'test-only-bootstrap-secret'};let requests=0;
+const env={DB:db,SB_ODDS_AUTHORIZED:'1',SB_SETUP_SECRET:'test-only-bootstrap-secret'};let requests=0;
 async function call(path,body,cookies='',csrf=''){const headers={'cf-connecting-ip':String(++requests),'Origin':'https://unit.test'};if(cookies)headers.Cookie=cookies;if(csrf)headers['X-CSRF-Token']=csrf;if(path==='setup')headers['X-Setup-Secret']=env.SB_SETUP_SECRET;return api(new Request('https://unit.test/api/sportsbook/'+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body)}),env)}
 function auth(r){const cookies=r.headers.getSetCookie();return {cookie:cookies.map(v=>v.split(';')[0]).join('; '),csrf:cookies.find(v=>v.startsWith('lh_csrf=')).split(';')[0].slice(8)}}
 let r=await call('setup',{username:'anton',password:'test-owner-password-123'});assert.equal(r.status,200);

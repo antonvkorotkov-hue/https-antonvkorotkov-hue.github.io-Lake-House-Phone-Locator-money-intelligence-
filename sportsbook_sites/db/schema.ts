@@ -13,3 +13,5 @@ export const recovery=sqliteTable('sb_recovery',{digest:text().primaryKey(),user
 export const rates=sqliteTable('sb_rates',{key:text().primaryKey(),window:integer().notNull(),hits:integer().notNull()});
 export const guards=sqliteTable('sb_guards',{nonce:text().primaryKey(),session_digest:text().notNull(),role:text().notNull()});
 export const adjustments=sqliteTable('sb_adjustments',{id:text().primaryKey(),actor:text().notNull(),user_id:text().notNull(),amount:integer().notNull(),reason:text().notNull(),created_at:integer().notNull()});
+
+export const feedDiagnostics=sqliteTable('sb_feed_diagnostics',{sport:text().primaryKey(),payload:text().notNull()});
