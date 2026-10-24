@@ -20,11 +20,11 @@ async function refresh(){
  await loadQuotes().catch(e=>{$('#feedStatus').textContent=e.message+' Your account and saved picks are still available.'});
 }
 async function loadQuotes(){
- if(loadingQuotes||submitting)return;loadingQuotes=true;const sport=$('#sport').value,market=$('#marketFilter').value,authenticated=loggedIn;
+ if(loadingQuotes||submitting)return;loadingQuotes=true;const sport=$('#sport').value,market=$('#marketFilter').value,authenticated=loggedIn,eventId=$('#gameFilter').value;
  try{
   let result;
-  if(authenticated)result=await api('quotes?sport='+encodeURIComponent(sport)+'&market='+encodeURIComponent(market));
-  else{const response=await fetch('/api/markets?sport='+encodeURIComponent(sport),{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error('Current markets could not be loaded. Tap Refresh to retry.');const feed=await response.json();result={...feed,unavailable_reason:feed.reason};}
+  if(authenticated)result=await api('quotes?sport='+encodeURIComponent(sport)+'&market='+encodeURIComponent(market)+'&event_id='+encodeURIComponent(eventId));
+  else{const response=await fetch('/api/markets?sport='+encodeURIComponent(sport)+'&event_id='+encodeURIComponent(eventId),{cache:'no-store',credentials:'same-origin',signal:AbortSignal.timeout(12000)});if(!response.ok)throw Error('Current markets could not be loaded. Tap Refresh to retry.');const feed=await response.json();result={...feed,unavailable_reason:feed.reason};}
   if(sport!==$('#sport').value||market!==$('#marketFilter').value||authenticated!==loggedIn)return;
   quotes=result.quotes||[];events=result.events||[];diagnostics=result.diagnostics||[];serverOffset=result.server_time?result.server_time*1000-Date.now():0;
   $('#feedStatus').textContent='Checked '+new Date(result.server_time*1000).toLocaleTimeString()+'. '+(result.unavailable_reason||'Real provider lines. Select odds, enter virtual points, then confirm your pick.');if(!reviewing)renderQuotes();
@@ -78,10 +78,10 @@ $('#invite').onclick=async()=>{try{const r=await api('invites','POST',{starting_
 $('#rules').onsubmit=async e=>{e.preventDefault();try{const b=Object.fromEntries([...new FormData(e.target)].map(([k,v])=>[k,Number(v)]));await api('rules','POST',b);msg('Limits saved');await loadHouse()}catch(err){msg(err.message,true)}};
 $('#ownerSetup').onsubmit=async e=>{e.preventDefault();try{await api('setup','POST',Object.fromEntries(new FormData(e.target)));e.target.reset();msg('Owner password set. Sign in below.')}catch(err){msg(err.message,true)}};
 $('#logout').onclick=async()=>{try{await api('logout','POST',{});location.reload()}catch(err){msg(err.message,true)}};
-$('#openAccess').onclick=showAccess;$('#closeAccess').onclick=()=>{$('#access').classList.add('hide');$('#markets').scrollIntoView({behavior:'smooth',block:'start'})};$('#refresh').onclick=()=>loadQuotes().catch(e=>msg(e.message,true));$('#sport').onchange=()=>{quotes=[];events=[];renderQuotes();loadQuotes().catch(e=>msg(e.message,true))};$('#marketFilter').onchange=()=>{renderQuotes();loadQuotes().catch(e=>msg(e.message,true))};$('#gameFilter').onchange=renderQuotes;$('#quote_id').onchange=estimate;$('#stake').oninput=estimate;
-all('[data-tab]').forEach(b=>b.onclick=()=>{if(!loggedIn&&b.dataset.tab!=='markets'){showAccess();msg('Sign in to view your saved picks and balance.');return}all('[data-tab]').forEach(x=>x.setAttribute('aria-selected',x===b?'true':'false'));all('.pane').forEach(p=>p.classList.toggle('hide',p.id!==b.dataset.tab))});
-setInterval(()=>{if(!document.hidden&&!$('#league').classList.contains('hide'))loadQuotes().catch(()=>msg('Feed refresh failed. Wagering will reject stale prices.',true))},10000);
+$('#openAccess').onclick=showAccess;$('#closeAccess').onclick=()=>{$('#access').classList.add('hide');$('#markets').scrollIntoView({behavior:'smooth',block:'start'})};$('#refresh').onclick=()=>loadQuotes().catch(e=>msg(e.message,true));$('#sport').onchange=()=>{quotes=[];events=[];renderQuotes();loadQuotes().catch(e=>msg(e.message,true))};$('#marketFilter').onchange=()=>{renderQuotes();loadQuotes().catch(e=>msg(e.message,true))};$('#gameFilter').onchange=()=>{renderQuotes();loadQuotes().catch(e=>msg(e.message,true))};$('#quote_id').onchange=estimate;$('#stake').oninput=estimate;
+all('[data-tab]').forEach(b=>b.onclick=()=>{if(!loggedIn&&b.dataset.tab!=='markets'){showAccess();msg('Sign in to view your saved picks and balance.');return}all('[data-tab]').forEach(x=>x.setAttribute('aria-selected',x===b?'true':'false'));all('.pane').forEach(p=>p.classList.toggle('hide',p.id!==b.dataset.tab));if(b.dataset.tab==='markets')loadQuotes().catch(e=>msg(e.message,true));if(b.dataset.tab==='history')loadPicks().catch(e=>msg(e.message,true))});
+setInterval(()=>{if(!document.hidden&&!$('#league').classList.contains('hide')&&!$('#markets').classList.contains('hide'))loadQuotes().catch(()=>msg('Feed refresh failed. Wagering will reject stale prices.',true))},10000);
 setInterval(()=>{if(!$('#league').classList.contains('hide'))estimate()},1000);
-document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('#league').classList.contains('hide'))loadQuotes().catch(e=>msg(e.message,true))});
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('#league').classList.contains('hide')&&!$('#markets').classList.contains('hide'))loadQuotes().catch(e=>msg(e.message,true))});
 guestView();refresh().catch(e=>{guestView();msg(e.message,true);loadQuotes().catch(err=>msg(err.message,true))});
 })();

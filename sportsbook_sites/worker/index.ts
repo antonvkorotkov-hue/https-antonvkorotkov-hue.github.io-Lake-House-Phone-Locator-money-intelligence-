@@ -20,12 +20,13 @@ const worker = {
       const sport=({NFL:'nfl',NCAAF:'college',NBA:'nba',MLB:'mlb',nfl:'nfl',college:'college',nba:'nba',mlb:'mlb'} as Record<string,string>)[requested];
       if(!sport)return Response.json({detail:'Unknown sport'},{status:422});
       const data=await publicMarkets(env,sport);
-      ctx.waitUntil(refresh(env,sport).catch(()=>console.error('Sportsbook market refresh failed')));
+      const wanted=url.searchParams.get('event_id')||'';const eventId=wanted.startsWith(sport+':')&&wanted.length<100?wanted:'';
+      ctx.waitUntil(refresh(env,sport,eventId).catch(()=>console.error('Sportsbook market refresh failed')));
       return Response.json(data,{headers:{'Cache-Control':'no-store'}});
     }
     if(path==="/api/sportsbook/quotes"&&request.method==="GET"){
       const response=await api(request,env);
-      if(response.ok)ctx.waitUntil(refresh(env,url.searchParams.get('sport')||'').catch(()=>console.error('Sportsbook market refresh failed')));
+      if(response.ok)ctx.waitUntil(refresh(env,url.searchParams.get('sport')||'',url.searchParams.get('event_id')||'').catch(()=>console.error('Sportsbook market refresh failed')));
       return response;
     }
     if(path!=="/sportsbook"&&!path.startsWith("/sportsbook-assets/")&&!path.startsWith("/api/sportsbook/")&&!path.startsWith("/_")){

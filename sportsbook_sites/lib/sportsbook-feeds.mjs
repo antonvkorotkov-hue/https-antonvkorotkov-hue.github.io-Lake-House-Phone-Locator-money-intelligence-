@@ -1,5 +1,5 @@
 import {all,one,hash,now,settle,quoteReason} from './sportsbook.mjs';
-const sports={nfl:['football/nfl','american-football','usa-nfl'],college:['football/college-football','american-football','usa-ncaa'],nba:['basketball/nba','basketball','usa-nba'],mlb:['baseball/mlb','baseball','usa-mlb']};
+const sports={nfl:['football/nfl','american-football','usa-nfl'],college:['football/college-football','american-football','usa-college'],nba:['basketball/nba','basketball','usa-nba'],mlb:['baseball/mlb','baseball','usa-mlb']};
 export const norm=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&/g,'and').replace(/\bst\.?$/,'state').replace(/[^a-z0-9]/g,'');
 const time=s=>{const t=Date.parse(s);return Number.isFinite(t)?Math.floor(t/1000):null};
 const prepare=(db,sql,args=[])=>db.prepare(sql).bind(...args);
@@ -50,11 +50,12 @@ export function offers(payload,event,env,reasons={}){const reject=reason=>{reaso
  for(const side of ['home','away','over','under']){if(row[side]==null)continue;if((market==='team_total'||market==='total'||market==='player_prop'||isTotal)&&!['over','under'].includes(side))continue;if((market==='moneyline'||market==='spread'||isMl||isSpread)&&!['home','away'].includes(side))continue;if((market==='spread'||isSpread||isTotal||['team_total','total','player_prop'].includes(market))&&line===null)continue;const odds=american(row[side]);if(odds===null)continue;const live=event.state==='live';if(live&&env.SB_LIVE_ODDS_AUTHORIZED!=='1'){reject('Live odds authorization is not enabled');continue}const adjusted=(market==='spread'||isSpread)&&side==='away'?-line:line;const selection=(sub?(market==='team_total'?teams[sub]:sub.split('|')[0])+' ':'')+(['home','away'].includes(side)?teams[side]:side)+(adjusted!==null?' '+adjusted:'');const source='Odds-API.io / '+book;const key=hash(JSON.stringify([event.id,market,period,selection,odds,adjusted,sourceAt,source]));out.push({id:key,event_id:event.id,market,selection,odds,line:adjusted===null?null:String(adjusted),side,subject:sub,period,source,source_at:sourceAt,received_at:now(),expires_at:now()+(live?15:120),closes_at:live?now()+15:event.starts_at,live:Number(live),suspended:0,licensed:Number(env.SB_ODDS_AUTHORIZED==='1')})}
  }
  }}return out}
-export async function refresh(env,selected=''){
+export async function refresh(env,selected='',selectedEvent=''){
  const db=env.DB;if(!db)return;
  const entries=Object.entries(sports).filter(([sport])=>!selected||selected===sport);
  await Promise.all(entries.map(async([sport,[path,apiSport,league]])=>{
-  const lease=await prepare(db,"INSERT INTO sb_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<? RETURNING value",['feed_refresh_'+sport,now()+120,now()-10]).first();
+  const prior=selectedEvent?await one(db,'SELECT * FROM sb_events WHERE id=? AND sport=?',[selectedEvent,sport]):null;const interval=prior&&(prior.state==='live'||prior.starts_at<now()+120)?10:45;const refreshKey='feed_refresh_'+sport+(selectedEvent?':'+selectedEvent:'');
+  const lease=await prepare(db,"INSERT INTO sb_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<? RETURNING value",[refreshKey,now()+120,now()-interval]).first();
   if(!lease)return;
   const diagnostic={sport,checked_at:now(),espn_events:0,provider_events:0,matched_events:0,quotes:0,leagues:[],rejections:{},events:{},reason:null};
   let stage='ESPN scoreboard';
@@ -69,28 +70,35 @@ export async function refresh(env,selected=''){
    if(!events.length)throw Error('ESPN returned no games for this scoreboard date');
    const cooldown=await one(db,"SELECT value FROM sb_config WHERE key='provider_retry_until'");if(cooldown?.value>now()){diagnostic.provider_retry_until=cooldown.value;throw Error('Odds-API.io is rate limited; retry after '+new Date(cooldown.value*1000).toISOString())}if(!env.ODDS_API_IO_KEY)throw Error('Odds-API.io key is not configured');
    if(env.SB_ODDS_AUTHORIZED!=='1')throw Error('Odds-API.io market usage authorization is not enabled');
-   stage='Odds-API.io league mapping';
-   diagnostic.leagues=await leaguesFor(sport,apiSport,league,env.ODDS_API_IO_KEY);
-   stage='Odds-API.io events';
-   const providerById=new Map();
-   for(const slug of diagnostic.leagues){
-    for(let skip=0;skip<5000;skip+=1000){
-     const params=new URLSearchParams({apiKey:env.ODDS_API_IO_KEY,sport:apiSport,league:slug,limit:'1000',skip:String(skip)});
-     const rows=await get('https://api.odds-api.io/v3/events?'+params);
-     if(!Array.isArray(rows))throw Error('Invalid provider events response');
-     for(const row of rows)providerById.set(String(row.id),row);
-     if(rows.length<1000)break;
+   const active=events.filter(e=>['scheduled','live'].includes(e.state));
+   const wanted=selectedEvent?active.filter(e=>e.id===selectedEvent):active.slice(0,3);
+   if(!wanted.length)throw Error('The selected ESPN game is not open for picks');
+   let matches=[];const missing=[];
+   for(const event of wanted){
+    const mapping=await one(db,'SELECT value FROM sb_config WHERE key=?',['provider_map_id:'+event.id]);
+    const mappedAt=await one(db,'SELECT value FROM sb_config WHERE key=?',['provider_map_time:'+event.id]);
+    if(mapping&&mappedAt?.value>now()-86400){const teams=JSON.parse(event.payload).teams;matches.push({providerId:String(mapping.value),event,cached:true,offer:{home:teams.home,away:teams.away,date:new Date(event.starts_at*1000).toISOString()}})}else missing.push(event.id);
+   }
+   if(missing.length){
+    stage='Odds-API.io league mapping';diagnostic.leagues=await leaguesFor(sport,apiSport,league,env.ODDS_API_IO_KEY);
+    stage='Odds-API.io events';const providerById=new Map();
+    for(const slug of diagnostic.leagues){
+     for(let skip=0;skip<5000;skip+=1000){
+      const params=new URLSearchParams({apiKey:env.ODDS_API_IO_KEY,sport:apiSport,league:slug,limit:'1000',skip:String(skip)});
+      const rows=await get('https://api.odds-api.io/v3/events?'+params);if(!Array.isArray(rows))throw Error('Invalid provider events response');
+      for(const row of rows)providerById.set(String(row.id),row);if(rows.length<1000)break;
+     }
     }
-   }
-   const providerEvents=[...providerById.values()];diagnostic.provider_events=providerEvents.length;
-   if(!providerEvents.length)throw Error('Provider returned no events for '+diagnostic.leagues.join(', '));
-   const candidates=[];
-   for(const offer of providerEvents){
-    const matched=events.filter(e=>eventMatches(offer,e));
-    if(matched.length===1&&['scheduled','live'].includes(matched[0].state))candidates.push({providerId:String(offer.id),event:matched[0],offer});
-   }
-   const matches=candidates.filter(m=>candidates.filter(x=>x.event.id===m.event.id).length===1);
-   for(const m of candidates)if(!matches.includes(m))diagnostic.events[m.event.id].reason='Ambiguous provider event mapping; no price accepted';
+    const providerEvents=[...providerById.values()];diagnostic.provider_events=providerEvents.length;
+    if(!providerEvents.length)throw Error('Provider returned no events for '+diagnostic.leagues.join(', '));
+    const candidates=[];
+    for(const offer of providerEvents){const found=active.filter(e=>eventMatches(offer,e));if(found.length===1)candidates.push({providerId:String(offer.id),event:found[0],offer})}
+    const unique=candidates.filter(m=>candidates.filter(x=>x.event.id===m.event.id).length===1);
+    for(const item of unique){
+     const numeric=Number(item.providerId);if(Number.isSafeInteger(numeric)&&numeric>0)await db.batch([prepare(db,'INSERT INTO sb_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',['provider_map_id:'+item.event.id,numeric]),prepare(db,'INSERT INTO sb_config(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value',['provider_map_time:'+item.event.id,now()])]);
+     if(missing.includes(item.event.id))matches.push(item);
+    }
+   }else{diagnostic.leagues=[league];diagnostic.mapping_cache=true;}
    diagnostic.matched_events=matches.length;
    stage='Odds-API.io market snapshots';
    for(let i=0;i<matches.length;i+=10){
@@ -103,7 +111,7 @@ export async function refresh(env,selected=''){
      let quotes=[];const reasons={};
      if(/settled|completed|finished|final|cancelled|canceled|suspended|postponed/i.test(String(match.offer.status||'')))detail.reason='Provider event is '+match.offer.status;
      else if(!snapshot)detail.reason='Provider returned no odds snapshot for matched event';
-     else if(!eventMatches({...match.offer,...snapshot},match.event))detail.reason='Provider snapshot teams or kickoff do not match ESPN';
+     else if(!eventMatches(match.cached?snapshot:{...match.offer,...snapshot},match.event)){detail.reason='Provider snapshot teams or kickoff do not match ESPN';if(match.cached)commands.push(prepare(db,'DELETE FROM sb_config WHERE key IN (?,?)',['provider_map_id:'+match.event.id,'provider_map_time:'+match.event.id]));}
      else if(/settled|completed|finished|final|cancelled|canceled|suspended|postponed/i.test(String(snapshot.status||'')))detail.reason='Provider snapshot is '+snapshot.status;
      else{
       quotes=offers(snapshot,match.event,env,reasons);
@@ -121,7 +129,7 @@ export async function refresh(env,selected=''){
    if(!diagnostic.quotes)diagnostic.reason=Object.keys(diagnostic.rejections).join('; ')||(!matches.length?'No unambiguous provider/ESPN event match':'Matched games have no supported available markets');
   }catch(error){if(error.status===429&&error.provider==='Odds-API.io'){diagnostic.provider_retry_until=error.retryAt;diagnostic.provider_rate_limit={limit:error.rateLimit,remaining:error.rateRemaining,reset:error.rateReset};await prepare(db,"INSERT INTO sb_config(key,value) VALUES('provider_retry_until',?) ON CONFLICT(key) DO UPDATE SET value=max(value,excluded.value)",[error.retryAt]).run()}diagnostic.reason=stage+': '+(error.name==='TimeoutError'?'request timed out':error.message);}
   await prepare(db,'INSERT INTO sb_feed_diagnostics(sport,payload) VALUES(?,?) ON CONFLICT(sport) DO UPDATE SET payload=excluded.payload',[sport,JSON.stringify(diagnostic)]).run();
-  await prepare(db,'UPDATE sb_config SET value=? WHERE key=?',[now(),'feed_refresh_'+sport]).run();
+  await prepare(db,'UPDATE sb_config SET value=? WHERE key=?',[now(),refreshKey]).run();
  }));
  // Final-result lookups share a separate lease; selecting a sport must not fan out settlement requests every ten seconds.
  const resultsLease=await prepare(db,"INSERT INTO sb_config(key,value) VALUES('result_refresh',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<? RETURNING value",[now(),now()-60]).first();
