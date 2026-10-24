@@ -47,7 +47,7 @@ globalThis.fetch=async input=>{
  if(u.pathname.endsWith('/leagues'))return Response.json([{name:'USA NCAA',slug:'verified-ncaa'}]);
  if(u.pathname.endsWith('/events')){assert.equal(u.searchParams.get('league'),'verified-ncaa');return Response.json([provider]);}
  if(u.pathname.endsWith('/odds/multi')){
-  if(mode==='outage')return new Response('upstream unavailable',{status:429});
+  if(mode==='outage')return new Response('upstream unavailable',{status:429,headers:{'x-ratelimit-limit':'100','x-ratelimit-remaining':'0','x-ratelimit-reset':new Date((now()+300)*1000).toISOString()}});
   if(mode==='missing')return Response.json([]);
   const s=snapshot();if(mode==='suspended')s.bookmakers.DraftKings.forEach(m=>m.suspended=true);
   return Response.json([s]);
@@ -83,7 +83,7 @@ for(const next of ['suspended','missing','outage']){
  assert.equal((await call('picks',{...body,request_key:'college-blocked-'+next},friend)).status,409);
  assert.equal((await (await call('me',undefined,friend)).json()).balance_points,975);
 }
-const providerCalls=requests.filter(u=>u.hostname.includes('odds-api')).length;sqlite.prepare("UPDATE sb_config SET value=0 WHERE key='feed_refresh_college'").run();await refresh(env,'college');assert.equal(requests.filter(u=>u.hostname.includes('odds-api')).length,providerCalls,'shared provider backoff prevents upstream retries');assert((await publicMarkets(env,'college')).retry_at>now());
+const providerCalls=requests.filter(u=>u.hostname.includes('odds-api')).length;sqlite.prepare("UPDATE sb_config SET value=0 WHERE key='feed_refresh_college'").run();await refresh(env,'college');assert.equal(requests.filter(u=>u.hostname.includes('odds-api')).length,providerCalls,'shared provider backoff prevents upstream retries');assert((await publicMarkets(env,'college')).retry_at>now()+290,'honors ISO provider reset time');
 sqlite.prepare('UPDATE sb_quotes SET suspended=0,expires_at=?').run(now()-1);
 assert.equal((await call('picks',{...body,request_key:'college-expired-price'},friend)).status,409);
 assert.match(quoteReason({...parsed[0],expires_at:now()-1},event),/expired/);
