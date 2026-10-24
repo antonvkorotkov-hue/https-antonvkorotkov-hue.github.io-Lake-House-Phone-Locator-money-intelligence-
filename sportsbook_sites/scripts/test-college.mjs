@@ -83,6 +83,7 @@ for(const next of ['suspended','missing','outage']){
  assert.equal((await call('picks',{...body,request_key:'college-blocked-'+next},friend)).status,409);
  assert.equal((await (await call('me',undefined,friend)).json()).balance_points,975);
 }
+const providerCalls=requests.filter(u=>u.hostname.includes('odds-api')).length;sqlite.prepare("UPDATE sb_config SET value=0 WHERE key='feed_refresh_college'").run();await refresh(env,'college');assert.equal(requests.filter(u=>u.hostname.includes('odds-api')).length,providerCalls,'shared provider backoff prevents upstream retries');assert((await publicMarkets(env,'college')).retry_at>now());
 sqlite.prepare('UPDATE sb_quotes SET suspended=0,expires_at=?').run(now()-1);
 assert.equal((await call('picks',{...body,request_key:'college-expired-price'},friend)).status,409);
 assert.match(quoteReason({...parsed[0],expires_at:now()-1},event),/expired/);

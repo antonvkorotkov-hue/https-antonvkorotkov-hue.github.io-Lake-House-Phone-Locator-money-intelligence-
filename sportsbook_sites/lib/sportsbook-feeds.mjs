@@ -5,7 +5,7 @@ const time=s=>{const t=Date.parse(s);return Number.isFinite(t)?Math.floor(t/1000
 const prepare=(db,sql,args=[])=>db.prepare(sql).bind(...args);
 async function get(url){
  const r=await fetch(url,{signal:AbortSignal.timeout(8000),headers:{'User-Agent':'LakeHouseVirtualSportsbook'}});
- if(!r.ok)throw Error((url.includes('espn.com')?'ESPN':'Odds-API.io')+' HTTP '+r.status+(r.status===429?' (rate limited)':r.status===401||r.status===403?' (key or subscription access denied)':''));
+ if(!r.ok){const retry=r.headers.get('retry-after'),seconds=Number(retry),reset=Number(r.headers.get('x-ratelimit-reset')),resetAt=reset>1e12?Math.floor(reset/1000):reset>now()?reset:reset>0&&reset<=3600?now()+reset:now()+60,retryAt=retry?(Number.isFinite(seconds)?now()+Math.max(1,seconds):Math.floor(Date.parse(retry)/1000)):resetAt;throw Object.assign(Error((url.includes('espn.com')?'ESPN':'Odds-API.io')+' HTTP '+r.status+(r.status===429?' (rate limited)':r.status===401||r.status===403?' (key or subscription access denied)':'')),{provider:url.includes('espn.com')?'ESPN':'Odds-API.io',status:r.status,retryAt:Number.isFinite(retryAt)?retryAt:now()+60,rateLimit:r.headers.get('x-ratelimit-limit'),rateRemaining:r.headers.get('x-ratelimit-remaining'),rateReset:r.headers.get('x-ratelimit-reset')})}
  return r.json();
 }
 export function eventMatches(offer,event){
@@ -67,7 +67,7 @@ export async function refresh(env,selected=''){
     diagnostic.events[event.id]={markets:{},reason:['scheduled','live'].includes(event.state)?'No matching Odds-API.io event with both teams and kickoff within 3 minutes':'ESPN event is '+event.state};
    }
    if(!events.length)throw Error('ESPN returned no games for this scoreboard date');
-   if(!env.ODDS_API_IO_KEY)throw Error('Odds-API.io key is not configured');
+   const cooldown=await one(db,"SELECT value FROM sb_config WHERE key='provider_retry_until'");if(cooldown?.value>now()){diagnostic.provider_retry_until=cooldown.value;throw Error('Odds-API.io is rate limited; retry after '+new Date(cooldown.value*1000).toISOString())}if(!env.ODDS_API_IO_KEY)throw Error('Odds-API.io key is not configured');
    if(env.SB_ODDS_AUTHORIZED!=='1')throw Error('Odds-API.io market usage authorization is not enabled');
    stage='Odds-API.io league mapping';
    diagnostic.leagues=await leaguesFor(sport,apiSport,league,env.ODDS_API_IO_KEY);
@@ -119,7 +119,7 @@ export async function refresh(env,selected=''){
     }
    }
    if(!diagnostic.quotes)diagnostic.reason=Object.keys(diagnostic.rejections).join('; ')||(!matches.length?'No unambiguous provider/ESPN event match':'Matched games have no supported available markets');
-  }catch(error){diagnostic.reason=stage+': '+(error.name==='TimeoutError'?'request timed out':error.message);}
+  }catch(error){if(error.status===429&&error.provider==='Odds-API.io'){diagnostic.provider_retry_until=error.retryAt;diagnostic.provider_rate_limit={limit:error.rateLimit,remaining:error.rateRemaining,reset:error.rateReset};await prepare(db,"INSERT INTO sb_config(key,value) VALUES('provider_retry_until',?) ON CONFLICT(key) DO UPDATE SET value=max(value,excluded.value)",[error.retryAt]).run()}diagnostic.reason=stage+': '+(error.name==='TimeoutError'?'request timed out':error.message);}
   await prepare(db,'INSERT INTO sb_feed_diagnostics(sport,payload) VALUES(?,?) ON CONFLICT(sport) DO UPDATE SET payload=excluded.payload',[sport,JSON.stringify(diagnostic)]).run();
   await prepare(db,'UPDATE sb_config SET value=? WHERE key=?',[now(),'feed_refresh_'+sport]).run();
  }));
@@ -142,5 +142,5 @@ export async function publicMarkets(env,sport){
  if(env.SB_ODDS_AUTHORIZED!=='1')return {quotes:[],reason:'Provider market usage authorization is not enabled'};
  const rows=await all(env.DB,"SELECT q.*,e.sport,e.matchup,e.state AS event_state,e.starts_at AS event_start,e.source_at AS event_checked FROM sb_quotes q JOIN sb_events e ON e.id=q.event_id WHERE e.sport=? AND q.market IN ('moneyline','spread','total') AND q.suspended=0 AND q.expires_at>? ORDER BY e.starts_at,q.source,q.market LIMIT 4000",[sport,now()]);
  const quotes=rows.filter(q=>!quoteReason(q,{state:q.event_state,starts_at:q.event_start,source_at:q.event_checked})&&(!q.live||env.SB_LIVE_ODDS_AUTHORIZED==='1')).map(q=>({id:q.id,sport:q.sport,event:q.matchup,market:q.market,selection:q.selection,odds:q.odds,source:q.source,source_at:q.source_at,received_at:q.received_at,expires_at:q.expires_at}));
- return {quotes,server_time:now(),checked_at:diagnostic?.checked_at,reason:quotes.length?null:diagnostic?.reason||'No confirmed active markets for this sport. Sign in to view each game’s availability details.'};
+ const retry=await one(env.DB,"SELECT value FROM sb_config WHERE key='provider_retry_until'");return {quotes,retry_at:retry?.value>now()?retry.value:null,server_time:now(),checked_at:diagnostic?.checked_at,reason:retry?.value>now()?'Odds-API.io is rate limited. Next provider check after '+new Date(retry.value*1000).toLocaleTimeString('en-US',{timeZone:'America/New_York'})+' Eastern.':quotes.length?null:diagnostic?.reason||'No confirmed active markets for this sport. Sign in to view each game’s availability details.'};
 }
