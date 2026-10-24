@@ -1,3 +1,4 @@
+import { GET as sportsbookPage } from "../app/sportsbook/route";
 import { refresh, publicMarkets } from "../lib/sportsbook-feeds.mjs";
 import { api,one,now } from "../lib/sportsbook.mjs";
 import legacy from "../lib/legacy-picks.js";
@@ -8,6 +9,11 @@ import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 const worker = {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
     const url=new URL(request.url),path=url.pathname;
+    if(path==='/'&&request.method==='GET')return sportsbookPage();
+    if(path==='/research'&&request.method==='GET'){
+      const researchUrl=new URL(request.url);researchUrl.pathname='/';
+      return legacy.fetch(new Request(researchUrl,request),env,ctx);
+    }
     // Fast sports-price endpoint: account-independent and separate from research.
     if(path==="/api/markets"&&request.method==="GET"){
       const requested=url.searchParams.get('sport')||'NFL';
