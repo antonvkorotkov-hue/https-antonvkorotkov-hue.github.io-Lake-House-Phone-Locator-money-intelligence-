@@ -132,8 +132,7 @@ export async function refresh(env,selected='',selectedEvent=''){
   await prepare(db,'UPDATE sb_config SET value=? WHERE key=?',[now(),refreshKey]).run();
  }));
  // Final-result lookups share a separate lease; selecting a sport must not fan out settlement requests every ten seconds.
- const resultsLease=await prepare(db,"INSERT INTO sb_config(key,value) VALUES('result_refresh',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value WHERE value<? RETURNING value",[now(),now()-60]).first();
- if(resultsLease)await refreshResults(env);
+ await refreshResultsLeased(env);
 }
 
 // Run settlement from account/standings reads as well as market refreshes.
