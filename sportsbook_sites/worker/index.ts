@@ -63,6 +63,11 @@ const worker = {
     }
     return runWithConnectorBinding(binding, () => handler.fetch(request, env, ctx));
   },
+  // This handler is invoked only when the existing host configures a scheduled
+  // trigger. Do not expose it as an unauthenticated HTTP endpoint.
+  async scheduled(_event: ScheduledController, env: Cloudflare.Env, ctx: ExecutionContext) {
+    ctx.waitUntil(refreshResultsLeased(env).catch(() => console.error("Scheduled sportsbook settlement failed")));
+  },
 };
 
 export default worker;
