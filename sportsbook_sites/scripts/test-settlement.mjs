@@ -20,7 +20,7 @@ const url='https://example.com/fixtures/final';
 await settle(db,event,{state:'final',scores:{home:21,away:14}},url);
 assert.equal(status(),'win');assert.equal(balance(),110000);assert.equal(count(),1);
 await settle(db,event,{state:'final',scores:{home:21,away:14},verification:'equivalent refresh'},url);
-assert.equal(balance(),120000);assert.equal(count(),1);
+assert.equal(balance(),110000);assert.equal(count(),1);
 await settle(db,event,{state:'final',scores:{home:14,away:21}},url);
 assert.equal(status(),'loss');assert.equal(balance(),90000);assert.equal(count(),2);
 await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
