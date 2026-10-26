@@ -4,3 +4,9 @@
 .card{overflow-wrap:anywhere}button,input,select{min-height:44px}nav{flex-wrap:wrap}footer{padding-bottom:env(safe-area-inset-bottom)}
 
 .back{display:block;margin-bottom:12px}#inviteResult{overflow-wrap:anywhere}footer{margin-top:25px}
+
+/* Tap-first virtual-pick selection on phones */
+.pick-choice{display:block;width:100%;margin:5px 0 13px;text-align:left;min-height:48px;background:#1d5675;border:1px solid #66a8cb}
+.pick-choice:focus-visible,.pick-choice[aria-pressed=true]{outline:3px solid #8edaff;background:#246c91}
+
+#reviewDialog{width:min(92vw,460px);border:1px solid #6e91aa;border-radius:16px;background:#14263b;color:#f1f7fe;padding:22px}#reviewDialog::backdrop{background:rgba(0,0,0,.7)}#reviewTerms{line-height:1.6}#confirmSave{background:#166c51}#pick{border:1px solid #4a7291;border-radius:12px;padding:14px;margin-top:18px;background:#102137}#chosenSlip{font-size:15px;color:#d8f0ff}#access{scroll-margin-top:12px}

@@ -1,7 +1,7 @@
 name: Sites sportsbook invariants
 on:
   push:
-    branches: [feature/private-virtual-sportsbook]
+    branches: [feature/private-virtual-sportsbook, recovery/virtual-sportsbook-20261025]
     paths: ['sportsbook_sites/**', '.github/workflows/sites-sportsbook.yml']
   pull_request:
     paths: ['sportsbook_sites/**', '.github/workflows/sites-sportsbook.yml']
@@ -23,4 +23,10 @@ jobs:
       - run: node scripts/test-sportsbook.mjs
         working-directory: sportsbook_sites
       - run: node --check lib/sportsbook-feeds.mjs
+        working-directory: sportsbook_sites
+      - run: node --check public/sportsbook-assets/app.js
+        working-directory: sportsbook_sites
+      - run: node scripts/test-client-session.mjs
+        working-directory: sportsbook_sites
+      - run: node scripts/test-college.mjs
         working-directory: sportsbook_sites

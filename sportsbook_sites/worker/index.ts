@@ -1,3 +1,6 @@
+import { GET as sportsbookPage } from "../app/sportsbook/route";
+import { refresh, publicMarkets } from "../lib/sportsbook-feeds.mjs";
+import { api,one,now } from "../lib/sportsbook.mjs";
 import legacy from "../lib/legacy-picks.js";
 import handler from "vinext/server/fetch-handler";
 import { runWithConnectorBinding } from "../lib/connector-context";
@@ -5,11 +8,32 @@ import type { ConnectorBinding } from "../lib/connector-contract.mjs";
 
 const worker = {
   async fetch(request: Request, env: Cloudflare.Env, ctx: ExecutionContext<{ CONNECTORS?: ConnectorBinding }>) {
-    const path=new URL(request.url).pathname;
+    const url=new URL(request.url),path=url.pathname;
+    if(path==='/'&&request.method==='GET')return sportsbookPage();
+    if(path==='/research'&&request.method==='GET'){
+      const researchUrl=new URL(request.url);researchUrl.pathname='/';
+      return legacy.fetch(new Request(researchUrl,request),env,ctx);
+    }
+    // Fast sports-price endpoint: account-independent and separate from research.
+    if(path==="/api/markets"&&request.method==="GET"){
+      const requested=url.searchParams.get('sport')||'NFL';
+      const sport=({NFL:'nfl',NCAAF:'college',NBA:'nba',MLB:'mlb',nfl:'nfl',college:'college',nba:'nba',mlb:'mlb'} as Record<string,string>)[requested];
+      if(!sport)return Response.json({detail:'Unknown sport'},{status:422});
+      const data=await publicMarkets(env,sport);
+      const wanted=url.searchParams.get('event_id')||'';const eventId=wanted.startsWith(sport+':')&&wanted.length<100?wanted:'';
+      ctx.waitUntil(refresh(env,sport,eventId).catch(()=>console.error('Sportsbook market refresh failed')));
+      return Response.json(data,{headers:{'Cache-Control':'no-store'}});
+    }
+    if(path==="/api/sportsbook/quotes"&&request.method==="GET"){
+      const response=await api(request,env);
+      if(response.ok)ctx.waitUntil(refresh(env,url.searchParams.get('sport')||'',url.searchParams.get('event_id')||'').catch(()=>console.error('Sportsbook market refresh failed')));
+      return response;
+    }
     if(path!=="/sportsbook"&&!path.startsWith("/sportsbook-assets/")&&!path.startsWith("/api/sportsbook/")&&!path.startsWith("/_")){
-      const response=await legacy.fetch(request,env,ctx);
+      const cooldown=path==='/api/board'&&env.DB?await one(env.DB,"SELECT value FROM sb_config WHERE key='provider_retry_until'"):null;
+      const response=await legacy.fetch(request,cooldown?.value>now()?{...env,ODDS_API_IO_KEY:undefined}:env,ctx);
       if(path==="/"&&response.headers.get('content-type')?.includes('text/html')){
-        const html=(await response.text()).replace('<body>','<body><a href="/sportsbook" style="display:block;padding:14px;background:#163b56;color:white;font:700 16px system-ui;text-decoration:none">Lake House Virtual Sportsbook →</a>');
+        const html=(await response.text()).replace('</body>','<script src="/sportsbook-assets/research-picks.js" defer></script></body>').replace('<body>','<body><a href="/sportsbook" style="display:block;padding:14px;background:#163b56;color:white;font:700 16px system-ui;text-decoration:none">Place virtual picks · My Picks &amp; balance →</a>');
         return new Response(html,{status:response.status,headers:response.headers});
       }
       return response;
