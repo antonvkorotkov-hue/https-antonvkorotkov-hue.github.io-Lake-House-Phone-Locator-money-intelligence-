@@ -32,3 +32,5 @@ jobs:
         working-directory: sportsbook_sites
       - run: node scripts/test-passwordless.mjs
         working-directory: sportsbook_sites
+      - run: node scripts/test-market-view.mjs
+        working-directory: sportsbook_sites

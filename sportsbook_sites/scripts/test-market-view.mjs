@@ -1,0 +1,17 @@
+import assert from 'node:assert/strict';
+import {compactMarkets,bookName} from '../public/sportsbook-assets/market-view.mjs';
+const time=1000;
+const q=(id,side,line,odds,book='DraftKings',extra={})=>({id,side,line,odds,source:'Odds-API.io / '+book,event_id:'nfl:test',market:'total',period:'full',subject:null,received_at:995,expires_at:1020,...extra});
+const quotes=[q('alt1','over',12.5,-50000),q('alt2','under',12.5,2500),q('main1','over',31.5,-111),q('main2','under',31.5,-109),q('fd1','over',32.5,-110,'FanDuel'),q('fd2','under',32.5,-110,'FanDuel')];
+let result=compactMarkets(quotes,{time});assert.equal(result.selectedBook,'DraftKings');assert.deepEqual(result.featured.map(q=>q.id),['main1','main2']);assert.equal(result.alternates.length,1);assert.equal(result.all.length,4);assert.deepEqual(result.books,['DraftKings','FanDuel']);
+result=compactMarkets(quotes,{time,book:'FanDuel'});assert.deepEqual(result.featured.map(q=>q.id),['fd1','fd2']);assert.equal(result.alternates.length,0);
+result=compactMarkets(quotes.map(q=>({...q,unavailable_reason:q.source.endsWith('DraftKings')?'Suspended':null})),{time});assert.equal(result.selectedBook,'FanDuel');
+assert.equal(compactMarkets(quotes.map(q=>({...q,expires_at:time})),{time}).all.length,0);
+assert.equal(compactMarkets(quotes.map(q=>({...q,suspended:1})),{time}).all.length,0);
+assert.equal(compactMarkets(quotes,{time,book:'Missing'}).all.length,0);
+result=compactMarkets([q('old','over',31.5,-111),q('new','over',31.5,-110,'DraftKings',{received_at:999}),q('under','under',31.5,-110)],{time});assert.deepEqual(result.featured.map(q=>q.id),['new','under']);
+result=compactMarkets([q('home','home',-3.5,-110,'DraftKings',{market:'spread'}),q('away','away',3.5,-110,'DraftKings',{market:'spread'})],{time});assert.equal(result.featured.length,2);
+result=compactMarkets([q('home','home',null,-150,'DraftKings',{market:'moneyline'}),q('away','away',null,130,'DraftKings',{market:'moneyline'})],{time});assert.equal(result.featured.length,2);
+result=compactMarkets([q('single','over',31.5,-110),q('over','over',35.5,-110),q('under','under',35.5,-110)],{time});assert.deepEqual(result.featured.map(q=>q.id),['over','under']);
+assert.equal(bookName({source:'Odds-API.io / DraftKings'}),'DraftKings');assert.equal(quotes.length,6,'input remains unchanged');
+console.log('PASS compact markets: one sportsbook, closest-priced complete pair, collapsed alternates, exact original quotes, fresh-only selection, deduplication, spread/moneyline grouping and missing-book states.');
