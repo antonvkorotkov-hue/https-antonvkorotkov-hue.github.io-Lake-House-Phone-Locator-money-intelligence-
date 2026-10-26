@@ -9,7 +9,8 @@ const db={prepare(q){let params=[];return{bind(...x){params=x;return this},async
 const t=Math.floor(Date.now()/1000);
 const uid='fixture-member',pick='fixture-pick',event='nfl:fixture';
 sql.prepare("INSERT INTO sb_users(id,username,password_hash,role,enabled,initial_balance,created_at) VALUES(?,?,?,'admin',1,100000,?)").run(uid,'fixture_admin','fixture-hash',t);
-sql.prepare("INSERT INTO sb_events VALUES(?,?,?,?,?,?,?,?)").run(event,'nfl','Away @ Home',t-7200,'live','fixture',t,'{}');
+sql.prepare("INSERT INTO sb_events VALUES(?,?,?,?,?,?,?,?)").run(event,'nfl','Away @ Home',t+3600,'scheduled','fixture',t,'{}');
+sql.prepare("INSERT INTO sb_quotes VALUES('fixture-quote',?,'moneyline','Home',100,NULL,'home',NULL,'full','fixture',?,?,?,?,0,0,1)").run(event,t,t,t+120,t+3600);
 const quote={market:'moneyline',side:'home',period:'full',line:null};
 sql.prepare("INSERT INTO sb_picks(id,user_id,quote_id,event_id,event_name,selection,odds,stake,potential_return,request_key,created_at,snapshot,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").run(pick,uid,'fixture-quote',event,'Away @ Home','Home',100,10000,20000,'fixture-request',t,JSON.stringify(quote),'pending');
 const count=()=>sql.prepare('SELECT count(*) AS n FROM sb_settlements').get().n;
@@ -17,13 +18,13 @@ const balance=()=>sql.prepare("SELECT sum(delta) AS n FROM sb_postings WHERE acc
 const status=()=>sql.prepare("SELECT status FROM sb_picks WHERE id=?").get(pick).status;
 const url='https://example.com/fixtures/final';
 await settle(db,event,{state:'final',scores:{home:21,away:14}},url);
-assert.equal(status(),'win');assert.equal(balance(),120000);assert.equal(count(),1);
+assert.equal(status(),'win');assert.equal(balance(),110000);assert.equal(count(),1);
 await settle(db,event,{state:'final',scores:{home:21,away:14},verification:'equivalent refresh'},url);
 assert.equal(balance(),120000);assert.equal(count(),1);
 await settle(db,event,{state:'final',scores:{home:14,away:21}},url);
-assert.equal(status(),'loss');assert.equal(balance(),100000);assert.equal(count(),2);
+assert.equal(status(),'loss');assert.equal(balance(),90000);assert.equal(count(),2);
 await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
-assert.equal(status(),'push');assert.equal(balance(),110000);assert.equal(count(),3);
+assert.equal(status(),'push');assert.equal(balance(),100000);assert.equal(count(),3);
 await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
 assert.equal(count(),3);assert.equal(sql.prepare("SELECT sum(delta) AS n FROM sb_postings").get().n,0);
 console.log('PASS settlement outcome corrections and no duplicate virtual credits');
