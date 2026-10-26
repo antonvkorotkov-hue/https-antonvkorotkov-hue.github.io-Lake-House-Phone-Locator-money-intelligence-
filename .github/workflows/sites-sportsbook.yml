@@ -44,3 +44,5 @@ jobs:
         working-directory: sportsbook_sites
       - run: node scripts/test-game-controls.mjs
         working-directory: sportsbook_sites
+      - run: node scripts/test-account-switch.mjs
+        working-directory: sportsbook_sites

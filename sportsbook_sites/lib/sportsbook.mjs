@@ -68,6 +68,17 @@ export async function api(request,env){const db=env.DB;if(!db)return json({detai
  }
  if(path==='status'&&method==='GET'){const admin=await one(db,"SELECT 1 value FROM sb_users WHERE role='admin'");return json({initialized:!!admin,owner_setup:'/signin-with-chatgpt?return_to=%2Fsportsbook',database:'D1',virtual_only:true,feeds:(await all(db,'SELECT payload FROM sb_feed_diagnostics')).map(r=>{const d=JSON.parse(r.payload);return {sport:d.sport,checked_at:d.checked_at,espn_events:d.espn_events,provider_events:d.provider_events,matched_events:d.matched_events,quotes:d.quotes,leagues:d.leagues,rejections:d.rejections,reason:d.reason,provider_retry_until:d.provider_retry_until,provider_rate_limit:d.provider_rate_limit}})})}
  if(path==='setup'&&method==='POST'){strict(b,['username','password']);const nativeOwner=!!request.headers.get('oai-authenticated-user-id')&&!!env.SB_OWNER_EMAIL&&request.headers.get('oai-authenticated-user-email')?.toLowerCase()===env.SB_OWNER_EMAIL.toLowerCase();const bootstrap=!!env.SB_SETUP_SECRET&&request.headers.get('x-setup-secret')===env.SB_SETUP_SECRET;const prior=await one(db,"SELECT * FROM sb_users WHERE role='admin'");if(!nativeOwner&&(!bootstrap||prior))fail(403,'Sign in with the Site owner ChatGPT account to set the owner password');const name=username(b.username),pw=await passwordHash(b.password);if(prior){await db.batch([statement(db,'UPDATE sb_users SET username=?,password_hash=? WHERE id=?',[name,pw,prior.id]),statement(db,'DELETE FROM sb_sessions WHERE user_id=?',[prior.id]),audit(db,prior.id,'owner_password_reset',{})]);return json({ok:true})}const uid=id();await statement(db,"INSERT INTO sb_users(id,username,password_hash,role,enabled,initial_balance,created_at) VALUES(?,?,?,'admin',1,100000,?)",[uid,name,pw,now()]).run();return json({ok:true})}
+ if(path==='account-options'&&method==='GET'){
+  const actor=await current(db,request);const owner=!!request.headers.get('oai-authenticated-user-id')&&!!env.SB_OWNER_EMAIL&&request.headers.get('oai-authenticated-user-email')?.toLowerCase()===env.SB_OWNER_EMAIL.toLowerCase();
+  if(actor.role!=='admin'&&!owner)fail(403,'Owner account switcher only');
+  return json({accounts:(await all(db,'SELECT id,username,role FROM sb_users WHERE enabled=1 ORDER BY role,username')).map(a=>({...a,label:a.role==='admin'?'Admin':a.username==='anton_player'?'Anton':a.username==='brad'?'Brad':a.username})),current_id:actor.id});
+ }
+ if(path==='switch-account'&&method==='POST'){
+  strict(b,['user_id']);const actor=await current(db,request);csrf(request,actor);const owner=!!request.headers.get('oai-authenticated-user-id')&&!!env.SB_OWNER_EMAIL&&request.headers.get('oai-authenticated-user-email')?.toLowerCase()===env.SB_OWNER_EMAIL.toLowerCase();
+  if(actor.role!=='admin'&&!owner)fail(403,'Owner account switcher only');
+  const target=typeof b.user_id==='string'?await one(db,'SELECT id FROM sb_users WHERE id=? AND enabled=1',[b.user_id]):null;if(!target)fail(404,'Account unavailable');
+  return await session(db,target.id,[...guards(db,actor),audit(db,actor.id,'owner_account_switched',{to:target.id})]);
+ }
  if(path==='owner-login'&&method==='POST'){
   strict(b,[]);const owner=!!request.headers.get('oai-authenticated-user-id')&&!!env.SB_OWNER_EMAIL&&request.headers.get('oai-authenticated-user-email')?.toLowerCase()===env.SB_OWNER_EMAIL.toLowerCase();
   if(!owner)fail(403,'Sign in with the Site owner ChatGPT account to open Admin');
