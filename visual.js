@@ -4,7 +4,7 @@ const $=id=>document.getElementById(id);
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=v=>(typeof v==='number'||typeof v==='string'&&v.trim()!=='')&&Number.isFinite(Number(v))?Number(v):null;
 const money=v=>number(v)!==null?new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(Number(v)):'Unavailable';
-const formatOdds=v=>v==null||v===''?'Unavailable':(Number(v)>0?'+':'')+String(v);
+const formatOdds=v=>number(v)===null?'Unavailable':(Number(v)>0?'+':'')+String(Number(v));
 const sportPaths={nfl:'football/nfl',college:'football/college-football',nba:'basketball/nba',mlb:'baseball/mlb'};
 let generation=0;
 const state={sport:'nfl',selected:'',market:'winner',events:[],markets:[],collected:null,scoreLoaded:null,tradeError:'',collectorErrors:[],scoreError:'',report:null,reportEvent:'',scoresCache:{},quoteHistory:{},scoreSnapshot:null,historyError:'',reportLoaded:null,reportSource:'',reportError:'',provider:'',contract:'',sourceLoaded:0,splits:[],splitsError:'',splitsLoaded:0,splitsMeta:null,licensedOdds:[],licensedStatus:'not_configured',tab:'games'};
