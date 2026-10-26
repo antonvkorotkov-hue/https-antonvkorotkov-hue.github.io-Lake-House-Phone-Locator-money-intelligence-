@@ -33,7 +33,7 @@ r=await call('login',{username:'friend',password:'recovered-friend-password'});c
 assert.equal((await call('members/'+f.id,{enabled:false,reason:'test disable',request_key:'disable-test-key-123'},owner.cookie,owner.csrf)).status,200);assert.equal((await call('me',undefined,again.cookie)).status,401);
 const before=sqlite.prepare('SELECT count(*) n FROM sb_postings').get().n;assert.equal(sqlite.prepare('SELECT sum(delta) n FROM sb_postings').get().n,0);assert(before>0);
 for(const [q,res,expected] of [[{market:'spread',side:'home',line:-10,period:'full'},{state:'final',scores:{home:20,away:10}},'push'],[{market:'total',side:'under',line:31,period:'full'},{state:'final',scores:{home:20,away:10}},'win'],[{market:'moneyline',side:'home',period:'full'},{state:'cancelled'},'void'],[{market:'player_prop',side:'over',line:20,subject:'p',period:'full'},{state:'final',props:{}},null]])assert.equal(grade(q,res),expected);
-assert.equal((await call('reconciliation',undefined,friend.cookie)).status,403);
+assert.equal((await call('reconciliation',undefined,friend.cookie)).status,401); // Disabled session cannot access administrator reports.
 const postingsBeforeReconciliation=sqlite.prepare('SELECT count(*) AS n FROM sb_postings').get().n;
 const reconciliationResponse=await call('reconciliation',undefined,owner.cookie);
 assert.equal(reconciliationResponse.status,200);
