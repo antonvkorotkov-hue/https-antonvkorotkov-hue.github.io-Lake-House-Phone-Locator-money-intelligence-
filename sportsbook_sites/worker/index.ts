@@ -24,6 +24,14 @@ const worker = {
       ctx.waitUntil(refresh(env,sport,eventId).catch(()=>console.error('Sportsbook market refresh failed')));
       return Response.json(data,{headers:{'Cache-Control':'no-store'}});
     }
+    if(path==="/api/sportsbook/picks"&&request.method==="GET"){
+      let response=await api(request,env);
+      if(response.ok){const picks=await response.clone().json();const games=[...new Map(picks.filter((p:any)=>p.status==='pending').map((p:any)=>[p.event_id,p.snapshot?.sport||p.event_id.split(':')[0]])).entries()].slice(0,3);
+        await Promise.allSettled(games.map(([id,sport])=>ensureEspnPrices(env,String(sport),String(id))));response=await api(request,env);
+        ctx.waitUntil(Promise.allSettled(games.map(([id,sport])=>refresh(env,String(sport),String(id)))));
+      }
+      return response;
+    }
     if(path==="/api/sportsbook/quotes"&&request.method==="GET"){
       let response=await api(request,env);
       if(response.ok){await ensureEspnPrices(env,url.searchParams.get('sport')||'',url.searchParams.get('event_id')||'').catch(()=>{});response=await api(request,env);ctx.waitUntil(refresh(env,url.searchParams.get('sport')||'',url.searchParams.get('event_id')||'').catch(()=>console.error('Sportsbook market refresh failed')))}

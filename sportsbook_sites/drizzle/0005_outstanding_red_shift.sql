@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `sb_cashout_request` ON `sb_cashouts` (`user_id`,`request_key`);
