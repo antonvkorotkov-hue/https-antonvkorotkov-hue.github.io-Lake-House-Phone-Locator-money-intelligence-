@@ -35,6 +35,7 @@ assert.ok(q('lh-v2-games').querySelector('.lh-c-headline'),'Price chart displays
 assert.ok(q('lh-v2-games').querySelector('.lh-c-metadata'),'Detailed price timestamps are collapsed');
 assert.ok(q('lh-v2-games').textContent.includes('SF -6.5'),'Published spread displayed');
 assert.ok(q('lh-v2-games').textContent.includes('+230'),'Nested ESPN moneyline is rendered');
+assert.ok(!q('lh-v2-games').textContent.includes('++230'),'Provider-signed positive odds have exactly one plus sign');
 assert.ok(q('lh-v2-games').textContent.includes('Not published'),'Missing markets visibly unavailable');
 assert.ok(q('lh-v2-games').querySelector('svg.lh-c-svg'),'Real-trade SVG renders');
 assert.ok(q('lh-v2-games').textContent.includes('team comparison'),'Team stats render');
