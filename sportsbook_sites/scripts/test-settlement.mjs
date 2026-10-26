@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
-import {settle} from '../lib/sportsbook.mjs';
+import {settle,grade} from '../lib/sportsbook.mjs';
 import {hasVerifiedScores} from '../lib/sportsbook-feeds.mjs';
 
 assert.equal(hasVerifiedScores([{homeAway:'home',score:'21'},{homeAway:'away',score:14}]),true);
 for(const bad of [null,'',undefined,'x'])assert.equal(hasVerifiedScores([{homeAway:'home',score:bad},{homeAway:'away',score:14}]),false);
 assert.equal(hasVerifiedScores([{homeAway:'home',score:21}]),false);
+const finalScore={state:'final',scores:{home:21,away:14}};
+assert.equal(grade({market:'team_total',subject:'invalid',side:'over',line:20,period:'full'},finalScore),null);
+assert.equal(grade({market:'total',side:'over',line:'invalid',period:'full'},finalScore),null);
+assert.equal(grade({market:'player_prop',subject:'missing',side:'over',line:10,period:'full'},finalScore),null);
 const sql=new DatabaseSync(':memory:');
 for(const f of readdirSync('drizzle').filter(x=>x.endsWith('.sql')).sort())sql.exec(readFileSync('drizzle/'+f,'utf8'));
 const db={prepare(q){let params=[];return{bind(...x){params=x;return this},async first(){return sql.prepare(q).get(...params)||null},async all(){return{results:sql.prepare(q).all(...params)}},async run(){return sql.prepare(q).run(...params)}}}};
