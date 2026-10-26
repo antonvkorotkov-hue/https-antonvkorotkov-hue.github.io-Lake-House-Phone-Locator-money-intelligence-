@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
 import {settle} from '../lib/sportsbook.mjs';
+import {hasVerifiedScores} from '../lib/sportsbook-feeds.mjs';
 
+assert.equal(hasVerifiedScores([{homeAway:'home',score:'21'},{homeAway:'away',score:14}]),true);
+for(const bad of [null,'',undefined,'x'])assert.equal(hasVerifiedScores([{homeAway:'home',score:bad},{homeAway:'away',score:14}]),false);
+assert.equal(hasVerifiedScores([{homeAway:'home',score:21}]),false);
 const sql=new DatabaseSync(':memory:');
 for(const f of readdirSync('drizzle').filter(x=>x.endsWith('.sql')).sort())sql.exec(readFileSync('drizzle/'+f,'utf8'));
 const db={prepare(q){let params=[];return{bind(...x){params=x;return this},async first(){return sql.prepare(q).get(...params)||null},async all(){return{results:sql.prepare(q).all(...params)}},async run(){return sql.prepare(q).run(...params)}}}};
