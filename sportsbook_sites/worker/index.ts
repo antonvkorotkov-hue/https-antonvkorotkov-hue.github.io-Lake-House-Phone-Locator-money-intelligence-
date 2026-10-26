@@ -31,7 +31,8 @@ const worker = {
     }
     if(path!=="/sportsbook"&&!path.startsWith("/sportsbook-assets/")&&!path.startsWith("/api/sportsbook/")&&!path.startsWith("/_")){
       const cooldown=path==='/api/board'&&env.DB?await one(env.DB,"SELECT value FROM sb_config WHERE key='provider_retry_until'"):null;
-      const response=await legacy.fetch(request,cooldown?.value>now()?{...env,ODDS_API_IO_KEY:undefined}:env,ctx);
+      // Sportsbook owns the shared primary-odds polling budget; research uses ESPN.
+      const response=await legacy.fetch(request,(path==='/api/board'&&env.DB)||cooldown?.value>now()?{...env,ODDS_API_IO_KEY:undefined}:env,ctx);
       if(path==="/"&&response.headers.get('content-type')?.includes('text/html')){
         const html=(await response.text()).replace('</body>','<script src="/sportsbook-assets/research-picks.js" defer></script></body>').replace('<body>','<body><a href="/sportsbook" style="display:block;padding:14px;background:#163b56;color:white;font:700 16px system-ui;text-decoration:none">Place virtual picks · My Picks &amp; balance →</a>');
         return new Response(html,{status:response.status,headers:response.headers});
