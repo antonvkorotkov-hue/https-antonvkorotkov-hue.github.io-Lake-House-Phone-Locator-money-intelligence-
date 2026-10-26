@@ -40,4 +40,11 @@ await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
 assert.equal(status(),'push');assert.equal(balance(),100000);assert.equal(count(),3);
 await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
 assert.equal(count(),3);assert.equal(sql.prepare("SELECT sum(delta) AS n FROM sb_postings").get().n,0);
+// A malformed historical record must not block settlement of other accepted picks.
+sql.prepare("INSERT INTO sb_picks(id,user_id,quote_id,event_id,event_name,selection,odds,stake,potential_return,request_key,created_at,snapshot,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").run('invalid-snapshot',uid,'fixture-quote',event,'Away @ Home','Home',100,10000,20000,'fixture-malformed',t,'{bad-json','pending');
+await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
+assert.equal(status(),'push');
+assert.equal(sql.prepare("SELECT status FROM sb_picks WHERE id='invalid-snapshot'").get().status,'pending');
+assert.equal(count(),3);
+
 console.log('PASS settlement outcome corrections and no duplicate virtual credits');
