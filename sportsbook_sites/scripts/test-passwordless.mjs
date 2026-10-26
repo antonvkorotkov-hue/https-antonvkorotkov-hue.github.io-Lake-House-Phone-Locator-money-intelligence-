@@ -36,3 +36,10 @@ assert.equal(sqlite.prepare('SELECT sum(delta) total FROM sb_postings').get().to
 assert.equal((await call('logout',{},members[0])).status,200);assert.equal((await call('me',undefined,members[0])).status,401);assert.equal((await call('me',undefined,members[1])).status,200);
 assert.deepEqual(sqlite.prepare("SELECT * FROM sb_users WHERE role='admin'").get(),original);
 console.log('PASS passwordless accounts: protected provisioning, exactly three accounts, preserved owner credentials, one grant each, hashed single-use expiring links, member/admin isolation, owner ChatGPT login, reissue without balance changes, session persistence and logout.');
+
+const freshDb=new DatabaseSync(':memory:');for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())freshDb.exec(readFileSync('drizzle/'+f,'utf8'));
+function freshPrepare(sql){let args=[];return {bind(...a){args=a;return this},async first(){return freshDb.prepare(sql).get(...args)||null},async all(){return {results:freshDb.prepare(sql).all(...args)}},async run(){return freshDb.prepare(sql).run(...args)}}}
+const autoDb={prepare:freshPrepare,async batch(commands){freshDb.exec('BEGIN IMMEDIATE');try{const out=[];for(const c of commands)out.push(await c.run());freshDb.exec('COMMIT');return out}catch(e){freshDb.exec('ROLLBACK');throw e}}};
+const autoEnv={...env,DB:autoDb};let status=await api(new Request('https://unit.test/api/sportsbook/status'),autoEnv);assert.equal(status.status,200);assert(!JSON.stringify(await status.json()).includes('access='));assert.equal(freshDb.prepare('SELECT count(*) n FROM sb_users').get().n,2);
+status=await api(new Request('https://unit.test/api/sportsbook/status'),autoEnv);assert.equal(status.status,200);assert.equal(freshDb.prepare('SELECT count(*) n FROM sb_postings').get().n,4);
+console.log('PASS owner-configured one-shot initialization: no public tokens, exact requested accounts, no repeated grants.');
