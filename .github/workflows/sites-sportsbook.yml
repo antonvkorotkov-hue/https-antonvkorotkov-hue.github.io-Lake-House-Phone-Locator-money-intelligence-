@@ -42,3 +42,5 @@ jobs:
         working-directory: sportsbook_sites
       - run: node scripts/test-line-movements.mjs
         working-directory: sportsbook_sites
+      - run: node scripts/test-game-controls.mjs
+        working-directory: sportsbook_sites

@@ -107,12 +107,20 @@ export async function refresh(env,selected='',selectedEvent=''){
   try{
    const url='https://site.api.espn.com/apis/site/v2/sports/'+path+'/scoreboard?'+new URLSearchParams(sport==='college'?{groups:'80',limit:'1000'}:{limit:'1000'});
    const board=await get(url);if(!Array.isArray(board.events))throw Error('Invalid ESPN scoreboard response');
-   const events=espnEvents(board,sport,url);diagnostic.espn_events=events.length;
+   let events=espnEvents(board,sport,url);
+   // On quiet days ESPN's default date may be empty or entirely final. Read the
+   // next seven days explicitly rather than leaving a blank game selector.
+   if(!events.some(e=>['scheduled','live'].includes(e.state))){
+    const day=t=>new Date(t*1000).toISOString().slice(0,10).replaceAll('-','');
+    const upcomingUrl=url+'&dates='+day(now())+'-'+day(now()+7*86400);
+    try{const upcoming=await get(upcomingUrl);if(Array.isArray(upcoming.events)){const merged=new Map(events.map(e=>[e.id,e]));for(const e of espnEvents(upcoming,sport,upcomingUrl))if(!merged.has(e.id))merged.set(e.id,e);events=[...merged.values()]}}catch{diagnostic.schedule_reason='Upcoming schedule could not be loaded; retry Refresh.'}
+   }
+   diagnostic.espn_events=events.length;
    for(const event of events){
     await prepare(db,'INSERT INTO sb_events VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET matchup=excluded.matchup,starts_at=excluded.starts_at,state=excluded.state,source_at=excluded.source_at,payload=excluded.payload',Object.values(event)).run();
     diagnostic.events[event.id]={markets:{},reason:['scheduled','live'].includes(event.state)?'No matching Odds-API.io event with both teams and kickoff within 3 minutes':'ESPN event is '+event.state};
    }
-   if(!events.length)throw Error('ESPN returned no games for this scoreboard date');
+   if(!events.length)throw Error(diagnostic.schedule_reason||'ESPN lists no games today or in the next seven days. Choose another sport.');
    const activeFallback=events.filter(e=>['scheduled','live'].includes(e.state));const fallbackTargets=selectedEvent?activeFallback.filter(e=>e.id===selectedEvent):activeFallback.sort((a,b)=>Number(b.state==='live')-Number(a.state==='live')||a.starts_at-b.starts_at).slice(0,3);
    for(const event of fallbackTargets){const fresh=await one(db,'SELECT 1 found FROM sb_quotes WHERE event_id=? AND suspended=0 AND expires_at>? LIMIT 1',[event.id,now()+3]);if(!fresh)await espnFallback(env,event,diagnostic)}
    stage='Odds-API.io';
