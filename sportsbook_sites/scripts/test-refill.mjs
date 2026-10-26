@@ -1,0 +1,18 @@
+import assert from 'node:assert/strict';import {DatabaseSync} from 'node:sqlite';import {readFileSync,readdirSync} from 'node:fs';import {api} from '../lib/sportsbook.mjs';
+const sqlite=new DatabaseSync(':memory:');for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sqlite.exec(readFileSync('drizzle/'+f,'utf8'));
+function prepare(sql){let args=[];return {bind(...a){args=a;return this},async first(){return sqlite.prepare(sql).get(...args)||null},async all(){return {results:sqlite.prepare(sql).all(...args)}},async run(){return sqlite.prepare(sql).run(...args)}}}
+const db={prepare,async batch(commands){sqlite.exec('BEGIN IMMEDIATE');try{const out=[];for(const c of commands)out.push(await c.run());sqlite.exec('COMMIT');return out}catch(e){sqlite.exec('ROLLBACK');throw e}}},env={DB:db};let ip=0;
+const call=(path,body,headers={})=>api(new Request('https://test.local/api/sportsbook/'+path,{method:body===undefined?'GET':'POST',headers:{Origin:'https://test.local','cf-connecting-ip':String(++ip),...headers},body:body===undefined?undefined:JSON.stringify(body)}),env);
+const user=await (await call('join',{username:'refilluser'})).json(),other=await (await call('join',{username:'refillother'})).json();const auth={Authorization:'Bearer '+user.session_token,'X-CSRF-Token':user.csrf_token},otherAuth={Authorization:'Bearer '+other.session_token,'X-CSRF-Token':other.csrf_token};
+const body={points:500,request_key:'refill-fixture-request-1'};
+assert.equal((await call('refill',body)).status,401);assert.equal((await call('refill',body,{Authorization:auth.Authorization})).status,403);assert.equal((await call('refill',{...body,user_id:'someone-else'},auth)).status,422);
+for(const points of [0,-1,0.5,10001,'500',null])assert.equal((await call('refill',{...body,points},auth)).status,422);
+let r=await call('refill',body,auth);assert.equal(r.status,200);assert.deepEqual(await r.json(),{added_points:500,balance_points:1500,duplicate:false});
+assert.equal((await (await call('refill',body,auth)).json()).duplicate,true);assert.equal((await (await call('me',undefined,auth)).json()).balance_points,1500);assert.equal((await (await call('me',undefined,otherAuth)).json()).balance_points,1000);
+assert.equal((await call('refill',{...body,points:1000},auth)).status,409);assert.equal(sqlite.prepare('SELECT count(*) n FROM sb_adjustments').get().n,1);
+assert.equal((await (await call('refill',body,otherAuth)).json()).balance_points,1500,'request keys are scoped to the signed-in account');
+r=await call('refill',{points:1000,request_key:'refill-fixture-request-2'},auth);assert.equal((await r.json()).balance_points,2500);assert.equal(sqlite.prepare('SELECT sum(delta) total FROM sb_postings').get().total,0);
+const board=await (await call('leaderboard',undefined,auth)).json();assert(board.every(r=>r.net_points===0),'free refills never count as betting profit');assert.equal(sqlite.prepare("SELECT count(*) n FROM sb_audit WHERE action='virtual_coins_added'").get().n,3);
+await call('logout',{},auth);assert.equal((await call('refill',{points:100,request_key:'revoked-refill-request'},auth)).status,401);
+const code=new URLSearchParams(new URL(user.sign_in_url).hash.slice(1)).get('access'),again=await (await call('access-login',{code})).json();assert.equal((await (await call('me',undefined,{Authorization:'Bearer '+again.session_token})).json()).balance_points,2500);
+console.log('PASS virtual coin refill: sign-in and CSRF, own-account-only credits, amount validation, idempotent retry, reused-key rejection, persisted balance, balanced issuance ledger, profit exclusion and revoked-session denial.');

@@ -38,3 +38,5 @@ jobs:
         working-directory: sportsbook_sites
       - run: node scripts/test-cashout.mjs
         working-directory: sportsbook_sites
+      - run: node scripts/test-refill.mjs
+        working-directory: sportsbook_sites

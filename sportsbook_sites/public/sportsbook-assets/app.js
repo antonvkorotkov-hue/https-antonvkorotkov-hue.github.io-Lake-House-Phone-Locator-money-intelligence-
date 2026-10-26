@@ -12,11 +12,11 @@ function showAccess(){
  $('#access').classList.remove('hide');$('#access').scrollIntoView({behavior:'smooth',block:'start'});
 }
 function guestView(){
- loggedIn=false;$('#league').classList.remove('hide');$('#who').textContent='Guest';$('#role').textContent='Browse real lines. Sign in to save picks.';$('#balance').textContent='Sign in';$('#adminTab').classList.add('hide');$('#logout').classList.add('hide');$('#openAccess').classList.remove('hide');$('#place').textContent='Sign in to save this pick';$('#picks').textContent='Sign in to see your saved picks.';$('#signinLinkCard').classList.add('hide');
+ loggedIn=false;$('#addCoins').classList.add('hide');$('#league').classList.remove('hide');$('#who').textContent='Guest';$('#role').textContent='Browse real lines. Sign in to save picks.';$('#balance').textContent='Sign in';$('#adminTab').classList.add('hide');$('#logout').classList.add('hide');$('#openAccess').classList.remove('hide');$('#place').textContent='Sign in to save this pick';$('#picks').textContent='Sign in to see your saved picks.';$('#signinLinkCard').classList.add('hide');
 }
 async function refresh(){
  let me;try{me=await api('me')}catch(err){if(err.message.includes('Login required')){await window.LHClient.clear();guestView();await loadQuotes();return}throw err}
- loggedIn=true;$('#access').classList.add('hide');$('#league').classList.remove('hide');$('#who').textContent=me.display_name||me.username;$('#role').textContent=me.role==='admin'?'Sole administrator · personal participant balance':'Invited member';$('#balance').textContent=amount(me.balance_points);$('#adminTab').classList.toggle('hide',me.role!=='admin');$('#logout').classList.remove('hide');$('#openAccess').classList.add('hide');$('#place').textContent='Review virtual pick';if(me.role!=='admin')$('#admin').classList.add('hide');
+ loggedIn=true;$('#addCoins').classList.remove('hide');$('#access').classList.add('hide');$('#league').classList.remove('hide');$('#who').textContent=me.display_name||me.username;$('#role').textContent=me.role==='admin'?'Sole administrator · personal participant balance':'Invited member';$('#balance').textContent=amount(me.balance_points);$('#adminTab').classList.toggle('hide',me.role!=='admin');$('#logout').classList.remove('hide');$('#openAccess').classList.add('hide');$('#place').textContent='Review virtual pick';if(me.role!=='admin')$('#admin').classList.add('hide');
  const checks=await Promise.allSettled([loadPicks(),loadBoard(),...(me.role==='admin'?[loadMembers(),loadHouse()]:[])]);for(const check of checks)if(check.status==='rejected')msg(check.reason.message,true);
  await loadQuotes().catch(e=>{$('#feedStatus').textContent=e.message+' Your account and saved picks are still available.'});
 }
@@ -137,6 +137,14 @@ setInterval(()=>{if(loggedIn&&!document.hidden&&!$('#history').classList.contain
 $('#refreshPicks').onclick=()=>loadPicks().catch(e=>msg(e.message,true));
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('#league').classList.contains('hide')&&!$('#markets').classList.contains('hide'))loadQuotes().catch(e=>msg(e.message,true))});
 all('[data-stake]').forEach(button=>button.onclick=()=>{$('#stake').value=button.dataset.stake;rememberSelection();estimate()});
+let addingCoins=false;
+$('#addCoins').onclick=()=>{$('#coinsError').textContent='';$('#coinsDialog').showModal()};$('#cancelCoins').onclick=()=>{$('#coinsDialog').close()};
+$('#coinsForm').onsubmit=async e=>{
+ e.preventDefault();if(addingCoins)return;addingCoins=true;$('#confirmCoins').disabled=true;$('#coinsError').textContent='';const points=Number($('#coinsAmount').value);
+ let request;try{request=JSON.parse(sessionStorage.getItem('lh-pending-refill')||'null')}catch{}if(!request||request.points!==points)request={points,request_key:crypto.randomUUID()};try{sessionStorage.setItem('lh-pending-refill',JSON.stringify(request))}catch{}
+ try{const receipt=await api('refill','POST',request);$('#balance').textContent=amount(receipt.balance_points);try{sessionStorage.removeItem('lh-pending-refill')}catch{}$('#coinsDialog').close();msg(receipt.duplicate?'This refill was already added. Your balance is up to date.':amount(receipt.added_points)+' virtual coins added. New balance: '+amount(receipt.balance_points));loadBoard().catch(()=>{})}
+ catch(err){$('#coinsError').textContent=err.message+' Check your balance before retrying; the same refill will not be credited twice.'}finally{addingCoins=false;$('#confirmCoins').disabled=false}
+};
 $('#passwordlessLinks').onclick=async()=>{const button=$('#passwordlessLinks');button.disabled=true;try{const result=await api('provision-friends','POST',{});$('#privateLinks').replaceChildren();for(const account of result.accounts){const row=document.createElement('p'),link=document.createElement('a');link.href=account.url;link.textContent=account.name+' private sign-in link';row.append(link);$('#privateLinks').append(row)}msg('Links created. Share each link privately with its owner. Each link works once and expires in 30 days.')}catch(err){msg(err.message,true)}finally{button.disabled=false}};
 guestView();(async()=>{const code=new URLSearchParams(location.hash.slice(1)).get('access');if(code){history.replaceState(null,'',location.pathname+location.search);await api('access-login','POST',{code});msg('Signed in without a password. Save this site to your Home Screen.')}else if(entry.get('admin')==='1'){await api('owner-login','POST',{});history.replaceState(null,'',location.pathname);msg('Admin signed in with your ChatGPT owner account.')}await refresh()})().catch(e=>{guestView();showAccess();msg(e.message,true);loadQuotes().catch(err=>msg(err.message,true))});
 })();
