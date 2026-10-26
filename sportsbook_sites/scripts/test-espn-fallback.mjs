@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
-import {espnOffers,espnEvents,refresh,publicMarkets} from '../lib/sportsbook-feeds.mjs';
+import {espnOffers,espnEvents,refresh,publicMarkets,ensureEspnPrices} from '../lib/sportsbook-feeds.mjs';
 import {api,now,quoteReason} from '../lib/sportsbook.mjs';
 const start=new Date((now()-1200)*1000).toISOString(),status={period:2,displayClock:'2:00',type:{state:'in',completed:false,detail:'2:00 - 2nd Quarter'}};
 const competitors=[{homeAway:'home',team:{displayName:'Seattle Seahawks'},score:'3'},{homeAway:'away',team:{displayName:'Kansas City Chiefs'},score:'0'}];
@@ -21,6 +21,6 @@ const original=globalThis.fetch;let upstream=0,summaries=0;globalThis.fetch=asyn
 try{await refresh(env,'nfl',event.id);assert.equal(upstream,0);const feed=await publicMarkets(env,'nfl');assert.equal(feed.quotes.length,6);assert(feed.quotes.every(q=>q.source.startsWith('ESPN live')));const count=summaries;await refresh(env,'nfl',event.id);assert.equal(summaries,count,'all users share refresh lease');
  let ip=0;const call=(path,body,headers={})=>api(new Request('https://test.local/api/sportsbook/'+path,{method:body===undefined?'GET':'POST',headers:{Origin:'https://test.local','cf-connecting-ip':String(++ip),...headers},body:body===undefined?undefined:JSON.stringify(body)}),env);
  const registered=await (await call('join',{username:'espnfixture'})).json(),auth={Authorization:'Bearer '+registered.session_token,'X-CSRF-Token':registered.csrf_token};const pick={quote_id:feed.quotes[0].id,stake_points:10,request_key:'espn-fallback-fixture-1'};let r=await call('picks',pick,auth);assert.equal(r.status,200);const receipt=await r.json();assert(receipt.pick_id);assert.equal((await (await call('picks',pick,auth)).json()).duplicate,true);assert.equal((await (await call('me',undefined,auth)).json()).balance_points,990);assert.equal((await (await call('picks',undefined,auth)).json()).length,1);
- sqlite.prepare('UPDATE sb_quotes SET expires_at=?').run(now()-1);assert.equal((await call('picks',{...pick,request_key:'expired-espn-fallback'},auth)).status,409);assert.equal(sqlite.prepare('SELECT sum(delta) n FROM sb_postings').get().n,0);
+ sqlite.prepare('UPDATE sb_quotes SET expires_at=?').run(now()-1);assert.equal((await call('picks',{...pick,request_key:'expired-espn-fallback'},auth)).status,409);assert.equal(sqlite.prepare('SELECT sum(delta) n FROM sb_postings').get().n,0);sqlite.prepare("UPDATE sb_config SET value=0 WHERE key LIKE 'espn_odds_refresh:%'").run();await ensureEspnPrices(env,'nfl',event.id);assert.equal((await publicMarkets(env,'nfl',event.id)).quotes.length,6,'selected-game request refreshes expired snapshots before returning prices');
 }finally{globalThis.fetch=original}
 console.log('PASS ESPN fallback: explicit live branches, source HTTP snapshot age/cache bounds, exact event/team/kickoff/clock matching, OFF/missing/stale rejection, primary cooldown isolation, shared polling, saved virtual pick, retry debit protection and expiry enforcement.');

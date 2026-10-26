@@ -87,6 +87,13 @@ async function espnFallback(env,event,diagnostic){
   await db.batch(commands);const detail=diagnostic.events[event.id];if(prices.length){detail.reason=null;detail.fallback='ESPN';for(const q of prices)detail.markets[q.market]=(detail.markets[q.market]||0)+1;diagnostic.quotes+=prices.length;diagnostic.fallback_quotes=(diagnostic.fallback_quotes||0)+prices.length;}
  }catch{diagnostic.events[event.id].fallback_reason='ESPN did not return a fresh verified odds snapshot';}
 }
+export async function ensureEspnPrices(env,sport,eventId){
+ if(!env.DB||!eventId||!sports[sport]||!eventId.startsWith(sport+':')||eventId.length>100)return;
+ const event=await one(env.DB,'SELECT * FROM sb_events WHERE id=? AND sport=?',[eventId,sport]);
+ if(!event||!['live','scheduled'].includes(event.state)||event.source_at<now()-60)return;
+ const fresh=await one(env.DB,"SELECT 1 found FROM sb_quotes WHERE event_id=? AND source LIKE 'ESPN %' AND suspended=0 AND expires_at>? LIMIT 1",[event.id,now()+5]);if(fresh)return;
+ await espnFallback(env,event,{quotes:0,events:{[event.id]:{markets:{},reason:null}}});
+}
 export async function refresh(env,selected='',selectedEvent=''){
  const db=env.DB;if(!db)return;
  const entries=Object.entries(sports).filter(([sport])=>!selected||selected===sport);
@@ -185,7 +192,8 @@ export async function refreshResults(env){const db=env.DB;const pending=await al
  }catch{/* Missing or conflicting final data stays pending. */}}}
 
 // Public sports prices only. This never reads or returns member/account records.
-export async function publicMarkets(env,sport){
+export async function publicMarkets(env,sport,selectedEvent=''){
+ await ensureEspnPrices(env,sport,selectedEvent);
  if(!env.DB)return {quotes:[],reason:'Persistent market database unavailable'};
  const schedule=await all(env.DB,'SELECT * FROM sb_events WHERE sport=? AND starts_at>? AND starts_at<? ORDER BY starts_at LIMIT 1000',[sport,now()-86400,now()+8*86400]);const events=schedule.map(e=>({...e,details:JSON.parse(e.payload)}));
  const row=await one(env.DB,'SELECT payload FROM sb_feed_diagnostics WHERE sport=?',[sport]);

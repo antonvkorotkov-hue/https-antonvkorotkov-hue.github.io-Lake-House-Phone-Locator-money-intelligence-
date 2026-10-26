@@ -1,5 +1,5 @@
 import { GET as sportsbookPage } from "../app/sportsbook/route";
-import { refresh, publicMarkets } from "../lib/sportsbook-feeds.mjs";
+import { refresh, publicMarkets, ensureEspnPrices } from "../lib/sportsbook-feeds.mjs";
 import { api,one,now } from "../lib/sportsbook.mjs";
 import legacy from "../lib/legacy-picks.js";
 import handler from "vinext/server/fetch-handler";
@@ -19,14 +19,14 @@ const worker = {
       const requested=url.searchParams.get('sport')||'NFL';
       const sport=({NFL:'nfl',NCAAF:'college',NBA:'nba',MLB:'mlb',nfl:'nfl',college:'college',nba:'nba',mlb:'mlb'} as Record<string,string>)[requested];
       if(!sport)return Response.json({detail:'Unknown sport'},{status:422});
-      const data=await publicMarkets(env,sport);
       const wanted=url.searchParams.get('event_id')||'';const eventId=wanted.startsWith(sport+':')&&wanted.length<100?wanted:'';
+      const data=await publicMarkets(env,sport,eventId);
       ctx.waitUntil(refresh(env,sport,eventId).catch(()=>console.error('Sportsbook market refresh failed')));
       return Response.json(data,{headers:{'Cache-Control':'no-store'}});
     }
     if(path==="/api/sportsbook/quotes"&&request.method==="GET"){
-      const response=await api(request,env);
-      if(response.ok)ctx.waitUntil(refresh(env,url.searchParams.get('sport')||'',url.searchParams.get('event_id')||'').catch(()=>console.error('Sportsbook market refresh failed')));
+      let response=await api(request,env);
+      if(response.ok){await ensureEspnPrices(env,url.searchParams.get('sport')||'',url.searchParams.get('event_id')||'').catch(()=>{});response=await api(request,env);ctx.waitUntil(refresh(env,url.searchParams.get('sport')||'',url.searchParams.get('event_id')||'').catch(()=>console.error('Sportsbook market refresh failed')))}
       return response;
     }
     if(path!=="/sportsbook"&&!path.startsWith("/sportsbook-assets/")&&!path.startsWith("/api/sportsbook/")&&!path.startsWith("/_")){
