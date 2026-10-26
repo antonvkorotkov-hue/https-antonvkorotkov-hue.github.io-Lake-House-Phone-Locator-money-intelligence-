@@ -1,5 +1,5 @@
 import { GET as sportsbookPage } from "../app/sportsbook/route";
-import { refresh, publicMarkets } from "../lib/sportsbook-feeds.mjs";
+import { refresh, publicMarkets, refreshResultsLeased } from "../lib/sportsbook-feeds.mjs";
 import { api,one,now } from "../lib/sportsbook.mjs";
 import legacy from "../lib/legacy-picks.js";
 import handler from "vinext/server/fetch-handler";
@@ -23,6 +23,10 @@ const worker = {
       const wanted=url.searchParams.get('event_id')||'';const eventId=wanted.startsWith(sport+':')&&wanted.length<100?wanted:'';
       ctx.waitUntil(refresh(env,sport,eventId).catch(()=>console.error('Sportsbook market refresh failed')));
       return Response.json(data,{headers:{'Cache-Control':'no-store'}});
+    }
+    if(request.method==="GET" && ["/api/sportsbook/picks","/api/sportsbook/leaderboard","/api/sportsbook/admin","/api/sportsbook/me"].includes(path)){
+      // Settle before returning balances, history and standings; shared lease limits calls.
+      await refreshResultsLeased(env).catch(()=>console.error("Sportsbook result refresh failed"));
     }
     if(path==="/api/sportsbook/quotes"&&request.method==="GET"){
       const response=await api(request,env);
