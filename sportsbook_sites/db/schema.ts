@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex } from 'drizzle-orm/sqlite-core';
+import { sqliteTable, text, integer, uniqueIndex, index } from 'drizzle-orm/sqlite-core';
 export const users=sqliteTable('sb_users',{id:text().primaryKey(),username:text().notNull().unique(),password_hash:text().notNull(),role:text().notNull(),enabled:integer().notNull().default(1),initial_balance:integer().notNull().default(100000),invite_digest:text(),created_at:integer().notNull()});
 export const invites=sqliteTable('sb_invites',{digest:text().primaryKey(),expires_at:integer().notNull(),used_by:text(),starting_balance:integer().notNull()});
 export const sessions=sqliteTable('sb_sessions',{digest:text().primaryKey(),user_id:text().notNull(),csrf:text().notNull(),expires_at:integer().notNull()});
@@ -16,3 +16,5 @@ export const adjustments=sqliteTable('sb_adjustments',{id:text().primaryKey(),ac
 
 export const feedDiagnostics=sqliteTable('sb_feed_diagnostics',{sport:text().primaryKey(),payload:text().notNull()});
 export const cashouts=sqliteTable('sb_cashouts',{pick_id:text().primaryKey(),user_id:text().notNull(),request_key:text().notNull(),amount:integer().notNull(),quote_id:text().notNull(),counter_quote_id:text().notNull(),quote_received_at:integer().notNull(),counter_received_at:integer().notNull(),offer_expires_at:integer().notNull(),created_at:integer().notNull()},t=>[uniqueIndex('sb_cashout_request').on(t.user_id,t.request_key)]);
+
+export const movements=sqliteTable('sb_line_movements',{id:integer().primaryKey({autoIncrement:true}),series:text().notNull(),event_id:text().notNull(),market:text().notNull(),side:text().notNull(),period:text().notNull(),subject:text(),source:text().notNull(),live:integer().notNull(),selection:text().notNull(),line:text(),odds:integer().notNull(),observed_at:integer().notNull(),last_seen:integer().notNull(),source_at:integer().notNull()},t=>[uniqueIndex('sb_movement_observation').on(t.series,t.observed_at),index('sb_movement_event').on(t.event_id,t.market,t.observed_at)]);

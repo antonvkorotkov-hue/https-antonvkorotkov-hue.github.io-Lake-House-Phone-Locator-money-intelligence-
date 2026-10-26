@@ -1,3 +1,4 @@
+import {lineHistory} from '../lib/line-movements.mjs';
 import { GET as sportsbookPage } from "../app/sportsbook/route";
 import { refresh, publicMarkets, ensureEspnPrices } from "../lib/sportsbook-feeds.mjs";
 import { api,one,now } from "../lib/sportsbook.mjs";
@@ -14,6 +15,7 @@ const worker = {
       const researchUrl=new URL(request.url);researchUrl.pathname='/';
       return legacy.fetch(new Request(researchUrl,request),env,ctx);
     }
+    if(path==='/api/line-history'&&request.method==='GET')return Response.json(await lineHistory(env,url.searchParams.get('event_id')||'',url.searchParams.get('market')||''),{headers:{'Cache-Control':'no-store'}});
     // Fast sports-price endpoint: account-independent and separate from research.
     if(path==="/api/markets"&&request.method==="GET"){
       const requested=url.searchParams.get('sport')||'NFL';

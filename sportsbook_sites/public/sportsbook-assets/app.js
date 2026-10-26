@@ -1,3 +1,4 @@
+import {loadMovement} from './line-movement.mjs';
 import {compactMarkets,bookName} from './market-view.mjs';
 (()=>{'use strict';
 const $=s=>document.querySelector(s),all=s=>[...document.querySelectorAll(s)];let quotes=[],events=[],diagnostics=[],pending=null,serverOffset=0,loadingQuotes=false,submitting=false,loggedIn=false,reviewing=false,alternatesOpen=false,loadingPicks=false,cashoutBusy=false;
@@ -61,7 +62,7 @@ if(view.featured.length){renderPair(view.featured,$('#quotes'));
 }else item('#quotes','No available '+market.replaceAll('_',' '),shown.find(q=>q.unavailable_reason)?.unavailable_reason||'Refresh for current prices or choose another game or sportsbook.');
 const restore=requestedQuote||selected;
 if(restore&&[...$('#quote_id').options].some(o=>o.value===restore)){$('#quote_id').value=restore;if(requestedQuote)msg('Your selection is ready. Enter points and review.')}else if(requestedQuote)msg('That line changed or expired. Choose an available price.',true);
-requestedQuote=null;estimate()}
+requestedQuote=null;estimate();loadMovement(chosen,market,$('#bookFilter').value)}
 
 function rememberSelection(){const quote_id=$('#quote_id').value;if(!quote_id)return;try{sessionStorage.setItem('lh-intended-pick',JSON.stringify({quote_id,sport:$('#sport').value,market:$('#marketFilter').value,stake_points:Number($('#stake').value)}))}catch{}}
 function estimate(){document.querySelectorAll('.pick-choice').forEach(b=>{b.setAttribute('aria-pressed',b.dataset.quoteId===$('#quote_id').value?'true':'false');const choice=quotes.find(q=>q.id===b.dataset.quoteId);b.disabled=!choice||expired(choice)||!!choice.unavailable_reason});const q=quotes.find(q=>q.id===$('#quote_id').value),s=Number($('#stake').value);$('#place').disabled=submitting||reviewing||!q||!!q.unavailable_reason||expired(q)||!Number.isInteger(s)||s<1||s>10000;$('#chosenSlip').textContent=q?q.selection+' · '+(q.odds>0?'+':'')+q.odds+' · '+bookName(q):'Select a team or total above to build your virtual pick.';if(!q){$('#return').textContent='Tap an available price to start.';return}const units=s*100;const r=units+(q.odds>0?Math.floor(units*q.odds/100):Math.floor(units*100/-q.odds));$('#return').textContent='Returns '+amount(r/100)+' points if won (includes your stake).'}

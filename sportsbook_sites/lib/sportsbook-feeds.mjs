@@ -1,3 +1,4 @@
+import {recordMovements} from './line-movements.mjs';
 import {all,one,hash,now,settle,quoteReason} from './sportsbook.mjs';
 const sports={nfl:['football/nfl','american-football','usa-nfl'],college:['football/college-football','american-football','usa-college'],nba:['basketball/nba','basketball','usa-nba'],mlb:['baseball/mlb','baseball','usa-mlb']};
 export const norm=s=>String(s||'').normalize('NFKD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/&/g,'and').replace(/\bst\.?$/,'state').replace(/[^a-z0-9]/g,'');
@@ -84,7 +85,7 @@ async function espnFallback(env,event,diagnostic){
   const response=await get(url,true);const prices=espnOffers(response,event,env);
   const commands=[prepare(db,"UPDATE sb_quotes SET suspended=1 WHERE event_id=? AND source LIKE 'ESPN %'",[event.id])];
   for(const q of prices)commands.push(prepare(db,'INSERT INTO sb_quotes VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET source_at=excluded.source_at,suspended=0,received_at=excluded.received_at,expires_at=excluded.expires_at,closes_at=excluded.closes_at',Object.values(q)));
-  await db.batch(commands);const detail=diagnostic.events[event.id];if(prices.length){detail.reason=null;detail.fallback='ESPN';for(const q of prices)detail.markets[q.market]=(detail.markets[q.market]||0)+1;diagnostic.quotes+=prices.length;diagnostic.fallback_quotes=(diagnostic.fallback_quotes||0)+prices.length;}
+  await db.batch(commands);await recordMovements(db,prices);const detail=diagnostic.events[event.id];if(prices.length){detail.reason=null;detail.fallback='ESPN';for(const q of prices)detail.markets[q.market]=(detail.markets[q.market]||0)+1;diagnostic.quotes+=prices.length;diagnostic.fallback_quotes=(diagnostic.fallback_quotes||0)+prices.length;}
  }catch{diagnostic.events[event.id].fallback_reason='ESPN did not return a fresh verified odds snapshot';}
 }
 export async function ensureEspnPrices(env,sport,eventId){
@@ -172,7 +173,7 @@ export async function refresh(env,selected='',selectedEvent=''){
      }
      detail.rejections=reasons;
      for(const [reason,count] of Object.entries(reasons))diagnostic.rejections[reason]=(diagnostic.rejections[reason]||0)+count;
-     diagnostic.quotes+=quotes.length;await db.batch(commands);
+     diagnostic.quotes+=quotes.length;await db.batch(commands);await recordMovements(db,quotes);
     }
    }
    if(!diagnostic.quotes)diagnostic.reason=Object.keys(diagnostic.rejections).join('; ')||(!matches.length?'No unambiguous provider/ESPN event match':'Matched games have no supported available markets');
