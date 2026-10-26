@@ -21,6 +21,7 @@ jobs:
       - run: python scripts/test-ledger.py
         working-directory: sportsbook_sites
       - run: node scripts/test-sportsbook.mjs
+      - run: node scripts/test-settlement.mjs
         working-directory: sportsbook_sites
       - run: node --check lib/sportsbook-feeds.mjs
         working-directory: sportsbook_sites
