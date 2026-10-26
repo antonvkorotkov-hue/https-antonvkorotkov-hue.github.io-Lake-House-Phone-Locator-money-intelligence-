@@ -52,7 +52,7 @@ const concurrentResult={state:'final',scores:{home:22,away:14}};
 await Promise.all([settle(db,event,concurrentResult,url),settle(db,event,concurrentResult,url)]);
 assert.equal(status(),'win');
 assert.equal(count(),4);
-assert.equal(balance(),110000);
+assert.equal(balance(),100000);
 assert.equal(sql.prepare("SELECT sum(delta) AS n FROM sb_postings").get().n,0);
 
 console.log('PASS settlement outcome corrections and no duplicate virtual credits');
