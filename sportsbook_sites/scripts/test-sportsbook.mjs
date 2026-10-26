@@ -55,6 +55,8 @@ const oldReport=await noRecords.json();
 assert(oldReport.user_summaries.every(x=>x.picks===0));
 assert(todayReport.user_summaries.every(x=>Number.isInteger(x.wins)&&Number.isInteger(x.losses)&&Number.isInteger(x.pending)));
 assert(todayReport.user_summaries.every(x=>Number.isFinite(x.net_points)));
+assert(todayReport.user_summaries.every(x=>x.picks===x.wins+x.losses+x.pushes+x.pending+(x.picks-x.wins-x.losses-x.pushes-x.pending)));
+assert(todayReport.user_summaries.every(x=>x.wins+x.losses+x.pushes+x.pending<=x.picks));
 assert.equal(oldReport.overdue_pending.length,0);
 assert.equal(oldReport.status_mismatches.length,0);
 assert.equal(oldReport.missing_settlements.length,0);
