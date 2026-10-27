@@ -3,7 +3,7 @@ const ESPN="https://site.api.espn.com/apis/site/v2/sports";
 const MLB="https://statsapi.mlb.com/api";
 const SPORT={
   NFL:{sport:"american-football",league:"usa-nfl",espn:"football/nfl"},
-  NCAAF:{sport:"american-football",league:"usa-ncaa",espn:"football/college-football"},
+  NCAAF:{sport:"american-football",league:"usa-college",espn:"football/college-football"},
   MLB:{sport:"baseball",league:"usa-mlb",espn:"baseball/mlb"},
   NBA:{sport:"basketball",league:"usa-nba",espn:"basketball/nba"}
 };
