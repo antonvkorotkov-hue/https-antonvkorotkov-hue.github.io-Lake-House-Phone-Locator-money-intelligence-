@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1793143495211,
+      "tag": "0000_cynical_thunderbolt",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1793143508923,
+      "tag": "0001_famous_hellion",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1793143534336,
+      "tag": "0002_quick_changeling",
+      "breakpoints": true
+    }
+  ]
+}

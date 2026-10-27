@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `accounts_recovery_hash_unique` ON `accounts` (`recovery_hash`);

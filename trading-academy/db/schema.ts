@@ -1,4 +1,5 @@
-// Intentionally empty by default.
-// Add Drizzle tables here when the site actually needs a database.
-// See examples/d1/db/schema.ts for an opt-in example.
-export {};
+import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
+export const accounts = sqliteTable('accounts', { id: text('id').primaryKey(), displayName: text('display_name').notNull(), cashCents: integer('cash_cents').notNull().default(10000000), recoveryHash: text('recovery_hash').notNull().unique(), createdAt: integer('created_at').notNull() });
+export const sessions = sqliteTable('sessions', { tokenHash: text('token_hash').primaryKey(), accountId: text('account_id').notNull().references(() => accounts.id), createdAt: integer('created_at').notNull(), expiresAt: integer('expires_at').notNull() }, t => [index('sessions_account_idx').on(t.accountId)]);
+export const ledger = sqliteTable('ledger', { id: text('id').primaryKey(), accountId: text('account_id').notNull().references(() => accounts.id), kind: text('kind').notNull(), cashDeltaCents: integer('cash_delta_cents').notNull(), createdAt: integer('created_at').notNull() }, t => [index('ledger_account_idx').on(t.accountId)]);
+export const rateLimits = sqliteTable('rate_limits', { key: text('key').primaryKey(), count: integer('count').notNull(), resetAt: integer('reset_at').notNull() });
