@@ -1,0 +1,3 @@
+import {authenticate,database,json} from '../../../lib/accounts/server';
+export const dynamic='force-dynamic';
+export async function GET(req:Request){try{const a=await authenticate(req);if(!a)return json({error:'Sign in first.'},401);const r=await database().prepare('SELECT id,kind,cash_delta_cents AS cashDeltaCents,created_at AS createdAt FROM ledger WHERE account_id=? ORDER BY created_at DESC LIMIT 100').bind(a.id).all();const total=await database().prepare('SELECT COALESCE(SUM(cash_delta_cents),0) AS total FROM ledger WHERE account_id=?').bind(a.id).first<{total:number}>();return json({entries:r.results,reconciled:total?.total===a.cash_cents})}catch{return json({error:'Activity unavailable.'},503)}}
