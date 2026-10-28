@@ -1,0 +1,6 @@
+import {authenticate,json,rateLimit} from '../../../../lib/accounts/server';
+import {marketConfig} from '../../../../lib/trading/config';
+import {MarketDataError} from '../../../../lib/trading/provider.mjs';
+import {marketMovers,searchStocks,stockDetail,stockHistory} from '../../../../lib/trading/market-read.mjs';
+export const dynamic='force-dynamic';
+export async function GET(req:Request){try{if(!await authenticate(req))return json({error:'Create or recover a practice account first.'},401);if(!await rateLimit(req,'market-read',180))return json({error:'Too many market requests. Try again later.'},429);const q=new URL(req.url).searchParams,action=q.get('action'),config=await marketConfig();if(action==='search')return json(await searchStocks(q.get('query')||'',config));if(action==='movers')return json(await marketMovers(q.get('direction')||'',config));const symbol=(q.get('symbol')||'').trim().toUpperCase();if(action==='detail')return json(await stockDetail(symbol,config));if(action==='history')return json(await stockHistory(symbol,q.get('range')||'1M',config));return json({error:'Unknown market request.'},400)}catch(e){return e instanceof MarketDataError?json({error:e.message},e.status):json({error:'Market information is temporarily unavailable.'},503)}}

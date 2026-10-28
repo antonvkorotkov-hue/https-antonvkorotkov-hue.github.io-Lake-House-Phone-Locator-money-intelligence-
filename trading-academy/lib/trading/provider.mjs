@@ -17,3 +17,15 @@ export async function getStockQuote(symbol,config,{fetcher=fetch,now}={}){
  try{validateQuote(quote,checkedAt)}catch(e){throw new MarketDataError(e.message,409)}
  return quote;
 }
+/** Read-only capability probe; it does not claim to verify contractual use rights. */
+export async function probeStockAccess(apiKey,{fetcher=fetch}={}){
+ for(const path of ['/v3/reference/tickers/AAPL','/v3/quotes/AAPL?limit=1&sort=timestamp&order=desc']){
+  let response;try{response=await fetcher('https://api.massive.com'+path,{headers:{Authorization:'Bearer '+apiKey},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)})}catch{throw new MarketDataError('The provider could not be reached. Your existing connection was not changed.')}
+  if(response.status===401||response.status===403)throw new MarketDataError('The key does not have access to the required stock reference and bid/ask quote endpoints.',400);
+  if(response.status===429)throw new MarketDataError('The provider rate limit was reached. Try again later.',429);
+  if(!response.ok)throw new MarketDataError('The provider returned an error. Your existing connection was not changed.');
+  const body=await response.json();if(body.status==='DELAYED')throw new MarketDataError('This key returned delayed data. A real-time subscription is required.',400);
+  if(path.includes('/quotes/')&&(!Array.isArray(body.results)||!body.results.length||!Number.isFinite(body.results[0].bid_price)||!Number.isFinite(body.results[0].ask_price)||body.results[0].bid_price<=0||body.results[0].ask_price<body.results[0].bid_price||!Number.isFinite(body.results[0].sip_timestamp)))throw new MarketDataError('The provider did not return a stock bid/ask quote. Check the key’s product access.',400);
+ }
+ return {quoteEndpointAccessible:true};
+}

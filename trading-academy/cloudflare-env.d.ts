@@ -4,6 +4,8 @@ declare namespace Cloudflare {
     MARKETDATA_API_KEY?: string;
     MARKETDATA_LICENSE_CONFIRMED?: string;
     MARKETDATA_REALTIME_CONFIRMED?: string;
+    OWNER_EMAIL?: string;
+    CREDENTIAL_ENCRYPTION_KEY?: string;
     BUCKET?: R2Bucket;
   }
 }

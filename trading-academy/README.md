@@ -15,7 +15,7 @@ An iPhone-first educational application. All money is virtual. The app never pla
 
 ## Not yet available
 
-This is not a completed trading simulator. Stock market-order preview/confirmation, an atomic cash ledger and persistent positions are implemented, but remain disabled until a licensed real-time provider is activated. Market movers, search, news, charts, live valuations, limit-order processing, options execution and expiration processing are not implemented. The app explicitly blocks trading and shows no invented market data. No stock-market API credential was found in the accessible existing projects. A licensed stock/options provider connection and verified entitlements are still required.
+This is not a completed trading simulator. Stock market-order preview/confirmation, an atomic cash ledger and persistent positions are implemented, but remain disabled until a licensed real-time provider is activated. Stock search, gainers/losers and historical line charts are implemented against the provider API but have not been verified with a live credential. News, active-stock rankings, index dashboards, live portfolio valuations, limit-order processing, options execution and expiration processing are not implemented. The app explicitly blocks trading and shows no invented market data. No stock-market API credential was found in the accessible existing projects. A licensed stock/options provider connection and verified entitlements are still required.
 
 The hosted site is public. Practice-account records remain protected by individual server-validated sessions; usernames alone cannot access them.
 
@@ -29,7 +29,7 @@ The calculation tests cover stock buy/sell consideration, buying power, ownershi
 
 ## Storage and deployment
 
-The source hosting manifest declares the Site and logical `DB` binding, not credentials. SQL migrations live under `drizzle/`. Apply local migrations only to the local preview database; the Sites publication workflow applies hosted migrations. Runtime credentials belong in protected hosting environment variables, never Git or browser code.
+The source hosting manifest declares the Site and logical `DB` binding, not credentials. SQL migrations live under `drizzle/`. Apply local migrations only to the local preview database; the Sites publication workflow applies hosted migrations. Runtime credentials belong in protected hosting environment variables or the encrypted owner-managed settings record, never Git or browser code.
 
 The Site source repository owns hosted publication. The `trading-academy/` directory on the GitHub `feature/trading-academy` branch is the corresponding source copy. Publishing the GitHub branch alone does not deploy this full-stack application, and GitHub Pages cannot run its D1-backed API.
 
@@ -38,3 +38,9 @@ The Site source repository owns hosted publication. The `trading-academy/` direc
 The server-only adapter targets Massive REST with fixed-origin HTTPS requests and an Authorization header. Protected runtime variables are `MARKETDATA_API_KEY`, `MARKETDATA_LICENSE_CONFIRMED` and `MARKETDATA_REALTIME_CONFIRMED`. The last two flags must be set to `true` only after the intended display/use entitlements and real-time product access have actually been verified. No credentials or entitlement claims are configured in source.
 
 Each stock preview fetches reference data, current exchange status and a fresh bid/ask quote. Confirmation fetches a new quote and requires the reviewed execution price to remain unchanged. Orders are rejected if the quote is stale, the preview expired, the regular session is closed, or the security is unsupported. The simplified virtual model uses the ask to buy and bid to sell, rounds against the trader to whole cents, assumes full fills, and models no commissions, queue position or slippage.
+
+## Owner connection setup
+
+The public app has an owner-only setup view at `/?setup=marketdata`. It uses verified hosting identity headers and a protected `OWNER_EMAIL` value; a normal practice-account session never grants owner access. The provider key is tested against reference and quote endpoints, then encrypted with AES-GCM using the protected runtime `CREDENTIAL_ENCRYPTION_KEY`. Neither the key nor its ciphertext is returned through an API. The owner must separately verify the provider plan permits the public app’s data use and real-time quotes. A successful endpoint probe is not a license verification or a live-market test.
+
+The automated API tests include owner/non-owner checks, encrypted persistence and key retrieval restricted to server code. Credential encryption tests reject a wrong key and tampered ciphertext. Market-read tests use isolated fixtures to cover search filtering, mover coverage, historical bars and timestamp normalization. No fixtures are used in the deployed application.

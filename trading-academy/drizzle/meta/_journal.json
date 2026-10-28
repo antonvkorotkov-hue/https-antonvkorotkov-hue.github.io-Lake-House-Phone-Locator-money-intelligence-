@@ -43,6 +43,13 @@
       "when": 1793145534263,
       "tag": "0005_amusing_tyger_tiger",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1793147486448,
+      "tag": "0006_curly_wallflower",
+      "breakpoints": true
     }
   ]
 }

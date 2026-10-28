@@ -14,15 +14,15 @@ class D1 {
  async batch(statements){this.sqlite.exec('BEGIN');try{const results=statements.map(x=>x.execute());this.sqlite.exec('COMMIT');return results}catch(e){this.sqlite.exec('ROLLBACK');throw e}}
 }
 test('account and order APIs: sessions, recovery, persistent fills and replay safety',async()=>{
- const root=await mkdtemp(path.join(tmpdir(),'lh-account-test-'));const db=new D1();globalThis.__tradingTestDb=db;globalThis.__tradingTestEnv={DB:db,MARKETDATA_API_KEY:'test-only',MARKETDATA_LICENSE_CONFIRMED:'true',MARKETDATA_REALTIME_CONFIRMED:'true'};const originalFetch=globalThis.fetch;
+ const root=await mkdtemp(path.join(tmpdir(),'lh-account-test-'));const db=new D1();globalThis.__tradingTestDb=db;globalThis.__tradingTestEnv={DB:db,MARKETDATA_API_KEY:'test-only',MARKETDATA_LICENSE_CONFIRMED:'true',MARKETDATA_REALTIME_CONFIRMED:'true',OWNER_EMAIL:'owner@example.test',CREDENTIAL_ENCRYPTION_KEY:'11'.repeat(32)};const originalFetch=globalThis.fetch;
  try{
   for(const f of (await readdir('drizzle')).filter(x=>x.endsWith('.sql')).sort()) db.sqlite.exec(await readFile('drizzle/'+f,'utf8'));
-  const files=['lib/accounts/crypto.ts','lib/accounts/server.ts','app/api/account/route.ts','app/api/watchlist/route.ts','app/api/activity/route.ts','app/api/status/route.ts','app/api/orders/route.ts','app/api/portfolio/route.ts','lib/trading/config.ts'];
+  const files=['lib/accounts/crypto.ts','lib/accounts/server.ts','app/api/account/route.ts','app/api/watchlist/route.ts','app/api/activity/route.ts','app/api/status/route.ts','app/api/orders/route.ts','app/api/portfolio/route.ts','app/api/owner/marketdata/route.ts','lib/trading/config.ts'];
   for(const f of files){let source=await readFile(f,'utf8');source=source.replace("import { env } from 'cloudflare:workers';",'const env=globalThis.__tradingTestEnv;').replace("import {env} from 'cloudflare:workers';",'const env=globalThis.__tradingTestEnv;').replaceAll('import.meta.env.DEV','false');let output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;output=output.replace(/from (['"])(\.[^'"]+)\1/g,(_a,q,p)=>`from ${q}${p.endsWith('.mjs')?p:p+'.mjs'}${q}`);const dest=path.join(root,f.replace(/\.ts$/,'.mjs'));await mkdir(path.dirname(dest),{recursive:true});await writeFile(dest,output)}
-  for(const f of ['engine.mjs','provider.mjs','persistence.mjs']){await mkdir(path.join(root,'lib/trading'),{recursive:true});await writeFile(path.join(root,'lib/trading',f),await readFile('lib/trading/'+f))}
+  for(const f of ['engine.mjs','provider.mjs','persistence.mjs','credentials.mjs']){await mkdir(path.join(root,'lib/trading'),{recursive:true});await writeFile(path.join(root,'lib/trading',f),await readFile('lib/trading/'+f))}
   const account=await import(pathToFileURL(path.join(root,'app/api/account/route.mjs')).href),watchlist=await import(pathToFileURL(path.join(root,'app/api/watchlist/route.mjs')).href),activity=await import(pathToFileURL(path.join(root,'app/api/activity/route.mjs')).href);
   const origin='https://trading.test';let ip=1;
-  const request=(cookie,body,method='GET',foreign=false)=>new Request(origin+'/api/account',{method,headers:{'Content-Type':'application/json','Origin':foreign?'https://elsewhere.test':origin,'cf-connecting-ip':`192.0.2.${ip}`,...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
+  const request=(cookie,body,method='GET',foreign=false,ownerFlag=false)=>new Request(origin+'/api/account',{method,headers:{'Content-Type':'application/json','Origin':foreign?'https://elsewhere.test':origin,'cf-connecting-ip':`192.0.2.${ip}`,...(ownerFlag?{'oai-authenticated-user-id':'test-owner','oai-authenticated-user-email':ownerFlag===true?'owner@example.test':'other@example.test'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
   assert.equal((await account.GET(request(''))).status,401);
   let response=await account.POST(request('',{action:'create',displayName:'A'},'POST'));assert.equal(response.status,201);assert.match(response.headers.get('set-cookie'),/HttpOnly; Secure; SameSite=Strict/);let aCookie=response.headers.get('set-cookie').split(';')[0],a=await response.json();assert.equal(a.cashCents,10000000);assert.equal('sessionToken' in a,false);assert.match(a.recoveryCode,/^[0-9a-f]{64}$/);
   assert.equal((await account.GET(request(aCookie))).status,200);
@@ -60,5 +60,15 @@ test('account and order APIs: sessions, recovery, persistent fills and replay sa
   stale=true;assert.equal((await orders.POST(request(bCookie,{action:'preview',symbol:'AAPL',side:'buy',quantityMicros:1000000},'POST'))).status,409);
   globalThis.__tradingTestEnv.MARKETDATA_API_KEY=undefined;assert.equal((await orders.POST(request(bCookie,{action:'preview',symbol:'AAPL',side:'buy',quantityMicros:1000000},'POST'))).status,503);
   assert.equal((await (await activity.GET(request(bCookie))).json()).reconciled,true);
+  const ownerRoute=await import(pathToFileURL(path.join(root,'app/api/owner/marketdata/route.mjs')).href);
+  assert.equal((await ownerRoute.GET(request(''))).status,401);
+  assert.equal((await ownerRoute.GET(request('',undefined,'GET',false,'other'))).status,401);
+  assert.equal((await ownerRoute.POST(request(bCookie,{apiKey:'test-owner-key',licensed:true,realtime:true},'POST'))).status,403);
+  assert.equal((await ownerRoute.GET(request('',undefined,'GET',false,true))).status,200);
+  let setup=await ownerRoute.POST(request('',{apiKey:'test-owner-key',licensed:true,realtime:true},'POST',false,true));assert.equal(setup.status,200);
+  assert.equal(db.sqlite.prepare('SELECT payload FROM settings WHERE id=?').get('marketdata').payload.includes('test-owner-key'),false);
+  const savedConfig=await (await import(pathToFileURL(path.join(root,'lib/trading/config.mjs')).href)).marketConfig();assert.equal(savedConfig.apiKey,'test-owner-key');
+  assert.equal((await (await ownerRoute.GET(request('',undefined,'GET',false,true))).json()).apiKey,undefined);
+
  }finally{globalThis.fetch=originalFetch;delete globalThis.__tradingTestEnv;delete globalThis.__tradingTestDb;db.sqlite.close();await rm(root,{recursive:true,force:true})}
 });

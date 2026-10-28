@@ -20,7 +20,7 @@ export async function POST(req:Request){
    const side=body.side;
    const quantityMicros=body.quantityMicros;
    if((side!=='buy'&&side!=='sell')||typeof quantityMicros!=='number'||!Number.isSafeInteger(quantityMicros)||quantityMicros<=0||quantityMicros>1000000000000)return json({error:'Enter a valid buy/sell side and quantity of up to 1,000,000 shares, with at most six decimal places.'},400);
-   const quote=await getStockQuote(symbol,marketConfig()),p=await position(a.id,symbol);
+   const quote=await getStockQuote(symbol,await marketConfig()),p=await position(a.id,symbol);
    const fill=calculateStockFill({side,quantityMicros,quote,now:Date.now(),cashCents:a.cash_cents,heldMicros:p.quantity_micros});
    if(fill.status!=='filled')return json({error:'Order is not executable.'},409);
    const id=randomSecret(),expiresAt=Math.min(Date.now()+20000,quote.timestamp+30000),priceCents=fill.priceCents;
@@ -31,7 +31,7 @@ export async function POST(req:Request){
    if(!validSecret(body.previewId))return json({error:'Invalid order preview.'},400);
    const existing=await db.prepare(publicOrderQuery()+' WHERE id=? AND account_id=?').bind(body.previewId,a.id).first();if(existing)return json({order:existing,replayed:true});
    const preview=await db.prepare('SELECT * FROM previews WHERE id=? AND account_id=?').bind(body.previewId,a.id).first<Preview>();if(!preview||preview.expires_at<=Date.now())return json({error:'The preview expired. Review a fresh quote before confirming.'},409);
-   const quote=await getStockQuote(preview.symbol,marketConfig());if(preview.expires_at<=Date.now())return json({error:'The preview expired. Request a fresh quote.'},409);const price=preview.side==='buy'?quote.askCents:quote.bidCents;
+   const quote=await getStockQuote(preview.symbol,await marketConfig());if(preview.expires_at<=Date.now())return json({error:'The preview expired. Request a fresh quote.'},409);const price=preview.side==='buy'?quote.askCents:quote.bidCents;
    if(price!==preview.price_cents)return json({error:'The market price changed. Request a new preview and confirm the updated price.'},409);
    const current=await db.prepare('SELECT cash_cents,version FROM accounts WHERE id=?').bind(a.id).first<{cash_cents:number;version:number}>();if(!current)return json({error:'Account unavailable.'},401);
    const p=await position(a.id,preview.symbol),fill=calculateStockFill({side:preview.side,quantityMicros:preview.quantity_micros,quote,now:Date.now(),cashCents:current.cash_cents,heldMicros:p.quantity_micros});
