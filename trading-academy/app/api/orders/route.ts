@@ -9,7 +9,16 @@ type Position={quantity_micros:number;cost_cents:number;realized_cents:number};
 type Preview={id:string;account_id:string;symbol:string;side:'buy'|'sell';quantity_micros:number;price_cents:number;expires_at:number};
 async function position(accountId:string,symbol:string):Promise<Position>{return await database().prepare('SELECT quantity_micros,cost_cents,realized_cents FROM positions WHERE account_id=? AND symbol=?').bind(accountId,symbol).first<Position>()||{quantity_micros:0,cost_cents:0,realized_cents:0}}
 function publicOrderQuery(){return 'SELECT id,symbol,side,quantity_micros AS quantityMicros,price_cents AS priceCents,amount_cents AS amountCents,realized_delta_cents AS realizedDeltaCents,quote_timestamp AS quoteTimestamp,created_at AS createdAt FROM orders'}
-export async function GET(req:Request){try{const a=await authenticate(req);if(!a)return json({error:'Sign in first.'},401);const r=await database().prepare(publicOrderQuery()+' WHERE account_id=? ORDER BY created_at DESC LIMIT 100').bind(a.id).all();return json({orders:r.results})}catch{return json({error:'Order history unavailable.'},503)}}
+export async function GET(req:Request){try{
+ const a=await authenticate(req);if(!a)return json({error:'Sign in first.'},401);
+ const q=new URL(req.url).searchParams,clauses=['account_id=?'],args:(string|number)[]=[a.id];
+ const side=q.get('side');if(side&&side!=='all'){if(!['buy','sell'].includes(side))return json({error:'Invalid history side filter.'},400);clauses.push('side=?');args.push(side)}
+ for(const [field,operator] of [['from','>='],['to','<']] as const){const raw=q.get(field);if(raw!==null){const value=Number(raw);if(!Number.isSafeInteger(value)||value<0)return json({error:'Invalid history date filter.'},400);clauses.push('created_at'+operator+'?');args.push(value)}}
+ const beforeTime=q.get('beforeTime'),beforeId=q.get('beforeId');
+ if(beforeTime!==null||beforeId!==null){const t=Number(beforeTime);if(beforeTime===null||!Number.isSafeInteger(t)||t<0||!beforeId||!/^[a-f0-9]{64}$/.test(beforeId))return json({error:'Invalid history cursor.'},400);clauses.push('(created_at<? OR (created_at=? AND id<?))');args.push(t,t,beforeId)}
+ const r=await database().prepare(publicOrderQuery()+' WHERE '+clauses.join(' AND ')+' ORDER BY created_at DESC,id DESC LIMIT 51').bind(...args).all<{id:string;createdAt:number}>();
+ const page=r.results.slice(0,50),last=page[page.length-1];return json({orders:page,nextCursor:r.results.length>50&&last?{time:last.createdAt,id:last.id}:null});
+}catch{return json({error:'Order history unavailable.'},503)}}
 export async function POST(req:Request){
  if(!sameOrigin(req))return json({error:'Invalid request origin.'},403);
  try{

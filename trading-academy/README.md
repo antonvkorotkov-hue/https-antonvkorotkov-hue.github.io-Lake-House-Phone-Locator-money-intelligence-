@@ -4,7 +4,7 @@ An iPhone-first educational application. All money is virtual. The app never pla
 
 ## Working features
 
-- Eight sticky top-navigation destinations and separate screens.
+- Nine sticky top-navigation destinations and separate screens.
 - Practice accounts with a $100,000 virtual opening balance.
 - HttpOnly, Secure, SameSite session cookies, hashed server-side session tokens, and a 90-day expiry.
 - Private one-time recovery codes. Recovery rotates the code and revokes older device sessions.
@@ -15,7 +15,7 @@ An iPhone-first educational application. All money is virtual. The app never pla
 
 ## Not yet available
 
-This is not a completed trading simulator. Stock market-order preview/confirmation, an atomic cash ledger and persistent positions are implemented, but remain disabled until a licensed real-time provider is activated. Stock search, gainers/losers and historical line charts are implemented against the provider API but have not been verified with a live credential. News, active-stock rankings, index dashboards, live portfolio valuations, limit-order processing, options execution and expiration processing are not implemented. The app explicitly blocks trading and shows no invented market data. No stock-market API credential was found in the accessible existing projects. A licensed stock/options provider connection and verified entitlements are still required.
+This is not a completed trading simulator. Stock market-order preview/confirmation, an atomic cash ledger and persistent positions are implemented, but remain disabled until a licensed real-time provider is activated. Stock search, gainers/losers and historical line charts are implemented against the provider API but have not been verified with a live credential. Official news feeds and a read-only options-chain section are implemented. Company news, active-stock rankings, index dashboards, live portfolio valuations, limit-order processing, options execution and expiration processing are not implemented. The app explicitly blocks trading and shows no invented market data. No stock-market API credential was found in the accessible existing projects. A licensed stock/options provider connection and verified entitlements are still required.
 
 The hosted site is public. Practice-account records remain protected by individual server-validated sessions; usernames alone cannot access them.
 
@@ -44,3 +44,11 @@ Each stock preview fetches reference data, current exchange status and a fresh b
 The public app has an owner-only setup view at `/?setup=marketdata`. It uses verified hosting identity headers and a protected `OWNER_EMAIL` value; a normal practice-account session never grants owner access. The provider key is tested against reference and quote endpoints, then encrypted with AES-GCM using the protected runtime `CREDENTIAL_ENCRYPTION_KEY`. Neither the key nor its ciphertext is returned through an API. The owner must separately verify the provider plan permits the public app’s data use and real-time quotes. A successful endpoint probe is not a license verification or a live-market test.
 
 The automated API tests include owner/non-owner checks, encrypted persistence and key retrieval restricted to server code. Credential encryption tests reject a wrong key and tampered ciphertext. Market-read tests use isolated fixtures to cover search filtering, mover coverage, historical bars and timestamp normalization. No fixtures are used in the deployed application.
+
+## Saved trades, news and options views
+
+Activity includes account-isolated buy/sell history, date and side filters, cursor pagination and expandable execution details. Integration tests confirm buys and partial sales remain in order history and positions after session recovery; another account cannot access them. Trade executions in these tests use isolated fixtures, not a live feed.
+
+News reads the official SEC and Federal Reserve RSS feeds without a market-data credential. It displays only attributed headlines, publication dates and source links. A shared five-minute cache and refresh lease limit upstream requests. Failed refreshes retain the last successful response with a visible warning and its original refresh time. No headlines are fabricated. Content is limited to official regulatory and central-bank announcements.
+
+Options chains require the owner to confirm options-data display rights separately. The API returns a bounded, filterable page of actual provider contracts, preserves each quote’s own delayed/real-time label, and leaves missing prices/Greeks blank. It never returns provider pagination URLs or API keys. Options orders are not enabled. The optional cost example is educational and is not an executable order.

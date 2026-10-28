@@ -17,9 +17,10 @@ test('account and order APIs: sessions, recovery, persistent fills and replay sa
  const root=await mkdtemp(path.join(tmpdir(),'lh-account-test-'));const db=new D1();globalThis.__tradingTestDb=db;globalThis.__tradingTestEnv={DB:db,MARKETDATA_API_KEY:'test-only',MARKETDATA_LICENSE_CONFIRMED:'true',MARKETDATA_REALTIME_CONFIRMED:'true',OWNER_EMAIL:'owner@example.test',CREDENTIAL_ENCRYPTION_KEY:'11'.repeat(32)};const originalFetch=globalThis.fetch;
  try{
   for(const f of (await readdir('drizzle')).filter(x=>x.endsWith('.sql')).sort()) db.sqlite.exec(await readFile('drizzle/'+f,'utf8'));
-  const files=['lib/accounts/crypto.ts','lib/accounts/server.ts','app/api/account/route.ts','app/api/watchlist/route.ts','app/api/activity/route.ts','app/api/status/route.ts','app/api/orders/route.ts','app/api/portfolio/route.ts','app/api/owner/marketdata/route.ts','lib/trading/config.ts'];
+  const files=['lib/accounts/crypto.ts','lib/accounts/server.ts','app/api/account/route.ts','app/api/watchlist/route.ts','app/api/activity/route.ts','app/api/status/route.ts','app/api/orders/route.ts','app/api/portfolio/route.ts','app/api/owner/marketdata/route.ts','app/api/news/route.ts','app/api/options/route.ts','lib/trading/config.ts'];
   for(const f of files){let source=await readFile(f,'utf8');source=source.replace("import { env } from 'cloudflare:workers';",'const env=globalThis.__tradingTestEnv;').replace("import {env} from 'cloudflare:workers';",'const env=globalThis.__tradingTestEnv;').replaceAll('import.meta.env.DEV','false');let output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;output=output.replace(/from (['"])(\.[^'"]+)\1/g,(_a,q,p)=>`from ${q}${p.endsWith('.mjs')?p:p+'.mjs'}${q}`);const dest=path.join(root,f.replace(/\.ts$/,'.mjs'));await mkdir(path.dirname(dest),{recursive:true});await writeFile(dest,output)}
-  for(const f of ['engine.mjs','provider.mjs','persistence.mjs','credentials.mjs']){await mkdir(path.join(root,'lib/trading'),{recursive:true});await writeFile(path.join(root,'lib/trading',f),await readFile('lib/trading/'+f))}
+  await mkdir(path.join(root,'lib/news'),{recursive:true});await writeFile(path.join(root,'lib/news/official-feeds.mjs'),await readFile('lib/news/official-feeds.mjs'));
+  for(const f of ['engine.mjs','provider.mjs','persistence.mjs','credentials.mjs','market-read.mjs','options-read.mjs']){await mkdir(path.join(root,'lib/trading'),{recursive:true});await writeFile(path.join(root,'lib/trading',f),await readFile('lib/trading/'+f))}
   const account=await import(pathToFileURL(path.join(root,'app/api/account/route.mjs')).href),watchlist=await import(pathToFileURL(path.join(root,'app/api/watchlist/route.mjs')).href),activity=await import(pathToFileURL(path.join(root,'app/api/activity/route.mjs')).href);
   const origin='https://trading.test';let ip=1;
   const request=(cookie,body,method='GET',foreign=false,ownerFlag=false)=>new Request(origin+'/api/account',{method,headers:{'Content-Type':'application/json','Origin':foreign?'https://elsewhere.test':origin,'cf-connecting-ip':`192.0.2.${ip}`,...(ownerFlag?{'oai-authenticated-user-id':'test-owner','oai-authenticated-user-email':ownerFlag===true?'owner@example.test':'other@example.test'}:{}),...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -29,7 +30,7 @@ test('account and order APIs: sessions, recovery, persistent fills and replay sa
   assert.equal((await watchlist.POST(request(aCookie,{action:'add',symbol:'AAPL'},'POST'))).status,200);
   await watchlist.POST(request(aCookie,{action:'add',symbol:'AAPL'},'POST'));
   assert.deepEqual((await (await watchlist.GET(request(aCookie))).json()).symbols,['AAPL']);
-  response=await account.POST(request('',{action:'create',displayName:'B'},'POST'));const bCookie=response.headers.get('set-cookie').split(';')[0];assert.equal(response.status,201);
+  response=await account.POST(request('',{action:'create',displayName:'B'},'POST'));const bCookie=response.headers.get('set-cookie').split(';')[0],bRecord=await response.json();assert.equal(response.status,201);
   assert.deepEqual((await (await watchlist.GET(request(bCookie))).json()).symbols,[]);
   let ledger=await (await activity.GET(request(aCookie))).json();assert.equal(ledger.reconciled,true);assert.equal(ledger.entries.length,1);assert.equal(ledger.entries[0].cashDeltaCents,10000000);
   assert.equal((await activity.GET(request(''))).status,401);
@@ -69,6 +70,19 @@ test('account and order APIs: sessions, recovery, persistent fills and replay sa
   assert.equal(db.sqlite.prepare('SELECT payload FROM settings WHERE id=?').get('marketdata').payload.includes('test-owner-key'),false);
   const savedConfig=await (await import(pathToFileURL(path.join(root,'lib/trading/config.mjs')).href)).marketConfig();assert.equal(savedConfig.apiKey,'test-owner-key');
   assert.equal((await (await ownerRoute.GET(request('',undefined,'GET',false,true))).json()).apiKey,undefined);
+  ip=3;
+  const bRestore=await account.POST(request('',{action:'recover',recoveryCode:bRecord.recoveryCode},'POST'));assert.equal(bRestore.status,200);const restoredB=bRestore.headers.get('set-cookie').split(';')[0];
+  assert.equal((await account.GET(request(bCookie))).status,401);
+  assert.equal((await (await orders.GET(request(restoredB))).json()).orders.length,2);
+  const filtered=new Request(origin+'/api/orders?side=buy',request(restoredB));assert.equal((await (await orders.GET(filtered)).json()).orders.length,1);
+  assert.equal((await (await orders.GET(new Request(origin+'/api/orders?side=sell',request(restoredB)))).json()).orders.length,1);
+  const aRestore=await account.POST(request('',{action:'recover',recoveryCode:recovered.recoveryCode},'POST'));const restoredA=aRestore.headers.get('set-cookie').split(';')[0];assert.equal((await (await orders.GET(request(restoredA))).json()).orders.length,0);
+  assert.equal((await (await portfolio.GET(request(restoredB))).json()).positions[0].quantityMicros,1000000);
+  const newsRoute=await import(pathToFileURL(path.join(root,'app/api/news/route.mjs')).href);let newsFetches=0;
+  globalThis.fetch=async(url,options)=>{newsFetches++;assert.equal(options.headers.Authorization,undefined);const host=new URL(url).hostname;return new Response('<rss><channel><item><title>Test official release</title><link>https://'+host+'/news/test-release</link><pubDate>Tue, 27 Oct 2026 12:00:00 GMT</pubDate></item></channel></rss>')};
+  let news=await (await newsRoute.GET(request(''))).json();assert.equal(news.stories.length,2);assert.equal(newsFetches,2);const initialRefresh=news.fetchedAt;assert.equal((await (await newsRoute.GET(request(''))).json()).cached,true);assert.equal(newsFetches,2);
+  db.sqlite.prepare('UPDATE settings SET updated_at=0 WHERE id=?').run('official-news');globalThis.fetch=async()=>{throw Error('Test source outage')};news=await (await newsRoute.GET(request(''))).json();assert.equal(news.stories.length,2);assert.equal(news.fetchedAt,initialRefresh);assert.equal(news.warnings.length,3);
+
 
  }finally{globalThis.fetch=originalFetch;delete globalThis.__tradingTestEnv;delete globalThis.__tradingTestDb;db.sqlite.close();await rm(root,{recursive:true,force:true})}
 });
