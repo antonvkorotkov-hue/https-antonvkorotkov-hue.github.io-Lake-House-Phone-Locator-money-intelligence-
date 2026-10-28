@@ -11,7 +11,10 @@ export function validateQuote(q, now, maxAgeMs=30_000) {
   if (q.bidCents > q.askCents) throw new Error('Invalid bid/ask spread');
   if (q.status !== 'open') throw new Error('Market is not open');
 }
-/** Fractional-share consideration rounds against the trader to whole cents. */
+/** Fractional-share consideration rounds against the trader to whole cents.
+ * @param {{side:'buy'|'sell',quantityMicros:number,quote:any,now:number,cashCents:number,heldMicros:number,limitCents?:number}} args
+ * @returns {{status:'open'}|{status:'filled',priceCents:number,amountCents:number,quantityMicros:number,quoteTimestamp:number,cashDeltaCents:number,holdingDeltaMicros:number}}
+ */
 export function calculateStockFill({side, quantityMicros, quote, now, cashCents, heldMicros, limitCents}) {
   if (side !== 'buy' && side !== 'sell') throw new Error('Invalid side');
   integer(quantityMicros,'quantity',1); integer(cashCents,'cash'); integer(heldMicros,'holding');
@@ -25,6 +28,7 @@ export function calculateStockFill({side, quantityMicros, quote, now, cashCents,
   if (!amountCents) throw new Error('Order value is too small');
   if (side==='buy' && amountCents>cashCents) throw new Error('Insufficient buying power');
   if (side==='sell' && quantityMicros>heldMicros) throw new Error('Insufficient shares');
+  if(!Number.isSafeInteger(cashCents+(side==='buy'?-amountCents:amountCents))) throw new Error('Order value too large');
   return {status:'filled',priceCents,amountCents,quantityMicros,quoteTimestamp:quote.timestamp,cashDeltaCents:side==='buy'?-amountCents:amountCents,holdingDeltaMicros:side==='buy'?quantityMicros:-quantityMicros};
 }
 /** Standard long option cost and expiration break-even; premiums are cents per share. */

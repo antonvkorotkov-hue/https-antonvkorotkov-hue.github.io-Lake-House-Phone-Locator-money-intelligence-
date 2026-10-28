@@ -13,12 +13,13 @@ class D1 {
  prepare(sql){let args=[];const statement=this.sqlite.prepare(sql);const prepared={bind(...values){args=values;return prepared},async first(){return statement.all(...args)[0]||null},async all(){return {results:statement.all(...args)}},async run(){return {success:true,meta:statement.run(...args)}},execute(){return {results:statement.all(...args),success:true}}};return prepared}
  async batch(statements){this.sqlite.exec('BEGIN');try{const results=statements.map(x=>x.execute());this.sqlite.exec('COMMIT');return results}catch(e){this.sqlite.exec('ROLLBACK');throw e}}
 }
-test('account API: isolated sessions, ledger, watchlist, recovery rotation and security',async()=>{
- const root=await mkdtemp(path.join(tmpdir(),'lh-account-test-'));const db=new D1();globalThis.__tradingTestDb=db;
+test('account and order APIs: sessions, recovery, persistent fills and replay safety',async()=>{
+ const root=await mkdtemp(path.join(tmpdir(),'lh-account-test-'));const db=new D1();globalThis.__tradingTestDb=db;globalThis.__tradingTestEnv={DB:db,MARKETDATA_API_KEY:'test-only',MARKETDATA_LICENSE_CONFIRMED:'true',MARKETDATA_REALTIME_CONFIRMED:'true'};const originalFetch=globalThis.fetch;
  try{
   for(const f of (await readdir('drizzle')).filter(x=>x.endsWith('.sql')).sort()) db.sqlite.exec(await readFile('drizzle/'+f,'utf8'));
-  const files=['lib/accounts/crypto.ts','lib/accounts/server.ts','app/api/account/route.ts','app/api/watchlist/route.ts','app/api/activity/route.ts','app/api/status/route.ts'];
-  for(const f of files){let source=await readFile(f,'utf8');source=source.replace("import { env } from 'cloudflare:workers';",'const env={DB:globalThis.__tradingTestDb};').replaceAll('import.meta.env.DEV','false');let output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;output=output.replace(/from (['"])(\.[^'"]+)\1/g,(_a,q,p)=>`from ${q}${p}.mjs${q}`);const dest=path.join(root,f.replace(/\.ts$/,'.mjs'));await mkdir(path.dirname(dest),{recursive:true});await writeFile(dest,output)}
+  const files=['lib/accounts/crypto.ts','lib/accounts/server.ts','app/api/account/route.ts','app/api/watchlist/route.ts','app/api/activity/route.ts','app/api/status/route.ts','app/api/orders/route.ts','app/api/portfolio/route.ts','lib/trading/config.ts'];
+  for(const f of files){let source=await readFile(f,'utf8');source=source.replace("import { env } from 'cloudflare:workers';",'const env=globalThis.__tradingTestEnv;').replace("import {env} from 'cloudflare:workers';",'const env=globalThis.__tradingTestEnv;').replaceAll('import.meta.env.DEV','false');let output=ts.transpileModule(source,{compilerOptions:{module:ts.ModuleKind.ESNext,target:ts.ScriptTarget.ES2022}}).outputText;output=output.replace(/from (['"])(\.[^'"]+)\1/g,(_a,q,p)=>`from ${q}${p.endsWith('.mjs')?p:p+'.mjs'}${q}`);const dest=path.join(root,f.replace(/\.ts$/,'.mjs'));await mkdir(path.dirname(dest),{recursive:true});await writeFile(dest,output)}
+  for(const f of ['engine.mjs','provider.mjs','persistence.mjs']){await mkdir(path.join(root,'lib/trading'),{recursive:true});await writeFile(path.join(root,'lib/trading',f),await readFile('lib/trading/'+f))}
   const account=await import(pathToFileURL(path.join(root,'app/api/account/route.mjs')).href),watchlist=await import(pathToFileURL(path.join(root,'app/api/watchlist/route.mjs')).href),activity=await import(pathToFileURL(path.join(root,'app/api/activity/route.mjs')).href);
   const origin='https://trading.test';let ip=1;
   const request=(cookie,body,method='GET',foreign=false)=>new Request(origin+'/api/account',{method,headers:{'Content-Type':'application/json','Origin':foreign?'https://elsewhere.test':origin,'cf-connecting-ip':`192.0.2.${ip}`,...(cookie?{Cookie:cookie}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -45,5 +46,19 @@ test('account API: isolated sessions, ledger, watchlist, recovery rotation and s
   ip=2;for(let i=0;i<10;i++) await account.POST(request('',{action:'recover',recoveryCode:'invalid'},'POST'));
   assert.equal((await account.POST(request('',{action:'recover',recoveryCode:'invalid'},'POST'))).status,429);
   assert.equal(db.sqlite.prepare('SELECT COUNT(*) AS n FROM accounts').get().n,2);
- }finally{delete globalThis.__tradingTestDb;db.sqlite.close();await rm(root,{recursive:true,force:true})}
+  const orders=await import(pathToFileURL(path.join(root,'app/api/orders/route.mjs')).href),portfolio=await import(pathToFileURL(path.join(root,'app/api/portfolio/route.mjs')).href);
+  let stale=false;
+  globalThis.fetch=async url=>Response.json(url.includes('/reference/')?{results:{ticker:'AAPL',active:true,market:'stocks',locale:'us',type:'CS',currency_name:'usd',primary_exchange:'XNAS',name:'Test fixture'}}:url.includes('/marketstatus/')?{serverTime:new Date().toISOString(),exchanges:{nyse:'open',nasdaq:'open'}}:{results:[{bid_price:100,ask_price:100.01,sip_timestamp:(Date.now()-(stale?60000:100))*1e6}]});
+  assert.equal((await orders.POST(request('',{action:'preview',symbol:'AAPL',side:'buy',quantityMicros:2000000},'POST'))).status,401);
+  let previewResponse=await orders.POST(request(bCookie,{action:'preview',symbol:'AAPL',side:'buy',quantityMicros:2000000},'POST'));assert.equal(previewResponse.status,200);let preview=await previewResponse.json();
+  let confirmed=await orders.POST(request(bCookie,{action:'confirm',previewId:preview.previewId},'POST'));assert.equal(confirmed.status,201);let replay=await orders.POST(request(bCookie,{action:'confirm',previewId:preview.previewId},'POST'));assert.equal(replay.status,200);assert.equal((await replay.json()).replayed,true);
+  assert.equal((await (await portfolio.GET(request(bCookie))).json()).positions[0].quantityMicros,2000000);
+  assert.equal((await (await activity.GET(request(bCookie))).json()).reconciled,true);
+  previewResponse=await orders.POST(request(bCookie,{action:'preview',symbol:'AAPL',side:'sell',quantityMicros:1000000},'POST'));assert.equal(previewResponse.status,200);preview=await previewResponse.json();confirmed=await orders.POST(request(bCookie,{action:'confirm',previewId:preview.previewId},'POST'));assert.equal(confirmed.status,201);
+  const holding=(await (await portfolio.GET(request(bCookie))).json()).positions[0];assert.equal(holding.quantityMicros,1000000);assert.equal(holding.costCents,10001);assert.equal(holding.realizedCents,-1);
+  assert.equal((await orders.POST(request(bCookie,{action:'preview',symbol:'AAPL',side:'sell',quantityMicros:2000000},'POST'))).status,400);
+  stale=true;assert.equal((await orders.POST(request(bCookie,{action:'preview',symbol:'AAPL',side:'buy',quantityMicros:1000000},'POST'))).status,409);
+  globalThis.__tradingTestEnv.MARKETDATA_API_KEY=undefined;assert.equal((await orders.POST(request(bCookie,{action:'preview',symbol:'AAPL',side:'buy',quantityMicros:1000000},'POST'))).status,503);
+  assert.equal((await (await activity.GET(request(bCookie))).json()).reconciled,true);
+ }finally{globalThis.fetch=originalFetch;delete globalThis.__tradingTestEnv;delete globalThis.__tradingTestDb;db.sqlite.close();await rm(root,{recursive:true,force:true})}
 });
