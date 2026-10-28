@@ -1,8 +1,11 @@
+import {finnhubQuote} from './alternate-provider.mjs';
 import {validateQuote} from './engine.mjs';
 export class MarketDataError extends Error { constructor(message,status=503){super(message);this.status=status;} }
-export function configured(config){return !!config?.apiKey && config.licensed===true && config.realtime===true;}
+export function configured(config){return !!config?.apiKey && config.licensed===true && config.realtime===true && config.provider!=='stockdata';}
+export function displayConfigured(config){return !!config?.apiKey && config.licensed===true;}
 export async function getStockQuote(symbol,config,{fetcher=fetch,now}={}){
  if(!configured(config))throw new MarketDataError('Real-time market data is not activated. A provider credential and verified display/use entitlements are required.');
+ if(config.provider==='finnhub'){const quote=await finnhubQuote(symbol,config,{fetcher,now});try{validateQuote(quote,now??Date.now())}catch(e){throw new MarketDataError(e.message,409)}return quote;}
  if(!/^[A-Z][A-Z0-9.\-]{0,14}$/.test(symbol))throw new MarketDataError('Enter a valid stock symbol.',400);
  async function read(path){let response;try{response=await fetcher('https://api.massive.com'+path,{headers:{Authorization:'Bearer '+config.apiKey},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)})}catch{throw new MarketDataError('The market-data provider could not be reached. Try again.');}if(response.status===401||response.status===403)throw new MarketDataError('The provider credential is not authorized for this data.');if(response.status===429)throw new MarketDataError('Market-data rate limit reached. Try again shortly.',429);if(!response.ok)throw new MarketDataError('Market data is temporarily unavailable.');let data;try{data=await response.json()}catch{throw new MarketDataError('The provider returned an invalid response.')}if(data.status==='DELAYED')throw new MarketDataError('This feed is delayed and cannot execute real-time practice orders.');return data;}
  const [reference,market,quotes]=await Promise.all([read('/v3/reference/tickers/'+encodeURIComponent(symbol)),read('/v1/marketstatus/now'),read('/v3/quotes/'+encodeURIComponent(symbol)+'?limit=1&sort=timestamp&order=desc')]);
