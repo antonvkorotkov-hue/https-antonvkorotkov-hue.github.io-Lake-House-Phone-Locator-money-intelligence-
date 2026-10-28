@@ -1,6 +1,6 @@
 'use client';
 import {useState} from 'react';
-export type PracticeAccount = {displayName:string;cashCents:number;createdAt?:number};
+export type PracticeAccount = {displayName:string;cashCents:number;createdAt?:number;version?:number;accountId?:string};
 export async function api<T>(path:string,body?:unknown,method?:string):Promise<T>{
  const r=await fetch(path,{method:method||(body?'POST':'GET'),headers:body?{'Content-Type':'application/json'}:undefined,body:body?JSON.stringify(body):undefined,credentials:'same-origin',cache:'no-store'});
  const data=await r.json() as T & {error?:string};if(!r.ok)throw new Error(data.error||'Request failed. Please try again.');return data;

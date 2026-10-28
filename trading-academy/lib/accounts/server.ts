@@ -13,10 +13,10 @@ export function sessionSecret(req: Request): string | null {
 }
 export function sessionCookie(token: string) { return `${COOKIE}=${token}; Path=/; HttpOnly${SECURE}; SameSite=Strict; Max-Age=${SESSION_LIFETIME/1000}`; }
 export function clearCookie() { return `${COOKIE}=; Path=/; HttpOnly${SECURE}; SameSite=Strict; Max-Age=0`; }
-export type Account = {id:string; display_name:string; cash_cents:number; created_at:number};
+export type Account = {id:string; display_name:string; cash_cents:number; created_at:number;version:number};
 export async function authenticate(req: Request): Promise<Account | null> {
  const token = sessionSecret(req); if (!token) return null;
- return database().prepare('SELECT a.id,a.display_name,a.cash_cents,a.created_at FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires_at>?').bind(await hashSecret(token),Date.now()).first<Account>();
+ return database().prepare('SELECT a.id,a.display_name,a.cash_cents,a.created_at,a.version FROM sessions s JOIN accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires_at>?').bind(await hashSecret(token),Date.now()).first<Account>();
 }
 export function sameOrigin(req: Request) { return req.headers.get('origin') === new URL(req.url).origin; }
 export async function readBody(req: Request): Promise<Record<string,unknown>> {

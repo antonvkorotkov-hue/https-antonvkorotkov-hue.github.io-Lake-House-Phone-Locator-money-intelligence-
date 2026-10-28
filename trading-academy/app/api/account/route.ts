@@ -2,7 +2,7 @@ import { hashSecret, validSecret } from '../../../lib/accounts/crypto';
 import { authenticate, clearCookie, database, issueSecrets, json, rateLimit, readBody, sameOrigin, sessionCookie, sessionSecret, SESSION_LIFETIME } from '../../../lib/accounts/server';
 export const dynamic='force-dynamic';
 export async function GET(req:Request) {
- try {const a=await authenticate(req); return a?json({displayName:a.display_name,cashCents:a.cash_cents,createdAt:a.created_at}):json({error:'Sign in or create a practice account.'},401)}
+ try {const a=await authenticate(req); return a?json({displayName:a.display_name,cashCents:a.cash_cents,createdAt:a.created_at,version:a.version,accountId:a.id}):json({error:'Sign in or create a practice account.'},401)}
  catch{return json({error:'Account service is temporarily unavailable.'},503)}
 }
 export async function DELETE(req:Request) {
@@ -24,19 +24,19 @@ export async function POST(req:Request){
     db.prepare('INSERT INTO sessions(token_hash,account_id,created_at,expires_at) VALUES(?,?,?,?)').bind(s.tokenHash,id,now,now+SESSION_LIFETIME),
     db.prepare('INSERT INTO ledger(id,account_id,kind,cash_delta_cents,created_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),id,'opening_balance',10000000,now)
    ]);
-   return json({displayName:name,cashCents:10000000,recoveryCode:s.recovery},201,{'Set-Cookie':sessionCookie(s.token)});
+   return json({displayName:name,cashCents:10000000,version:0,accountId:id,recoveryCode:s.recovery},201,{'Set-Cookie':sessionCookie(s.token)});
   }
   if(body.action==='recover'){
    if(!validSecret(body.recoveryCode))return json({error:'Recovery code is invalid or has already been used.'},400);
    const s=await issueSecrets(),old=await hashSecret(body.recoveryCode);
    const results=await db.batch([
-    db.prepare('UPDATE accounts SET recovery_hash=? WHERE recovery_hash=? RETURNING id,display_name,cash_cents').bind(s.recoveryHash,old),
+    db.prepare('UPDATE accounts SET recovery_hash=? WHERE recovery_hash=? RETURNING id,display_name,cash_cents,version').bind(s.recoveryHash,old),
     db.prepare('DELETE FROM sessions WHERE account_id IN (SELECT id FROM accounts WHERE recovery_hash=?)').bind(s.recoveryHash),
     db.prepare('INSERT INTO sessions(token_hash,account_id,created_at,expires_at) SELECT ?,id,?,? FROM accounts WHERE recovery_hash=?').bind(s.tokenHash,now,now+SESSION_LIFETIME,s.recoveryHash)
    ]);
-   const a=results[0].results?.[0] as {display_name:string;cash_cents:number}|undefined;
+   const a=results[0].results?.[0] as {id:string;display_name:string;cash_cents:number;version:number}|undefined;
    if(!a)return json({error:'Recovery code is invalid or has already been used.'},401);
-   return json({displayName:a.display_name,cashCents:a.cash_cents,recoveryCode:s.recovery},200,{'Set-Cookie':sessionCookie(s.token)});
+   return json({displayName:a.display_name,cashCents:a.cash_cents,version:a.version,accountId:a.id,recoveryCode:s.recovery},200,{'Set-Cookie':sessionCookie(s.token)});
   }
   if(body.action==='rename'){
    const a=await authenticate(req);if(!a)return json({error:'Sign in first.'},401);
