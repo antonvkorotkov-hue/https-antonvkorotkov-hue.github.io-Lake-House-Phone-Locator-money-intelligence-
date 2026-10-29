@@ -1,0 +1,37 @@
+name: Verify Lake House Trading Academy
+on:
+  push:
+    branches: [feature/trading-academy]
+    paths: ['trading-academy/**', '.github/workflows/trading-academy.yml']
+  pull_request:
+    paths: ['trading-academy/**', '.github/workflows/trading-academy.yml']
+permissions:
+  contents: read
+concurrency:
+  group: trading-academy-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: trading-academy
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+      CLOUDFLARE_CF_FETCH_ENABLED: 'false'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Install pinned package manager
+        run: npm install --global pnpm@11.25.0
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Test account isolation, ledger, orders and market adapters
+        run: pnpm test
+      - name: Type check
+        run: pnpm typecheck
+      - name: Build full-stack application
+        run: pnpm build
