@@ -1,0 +1,9 @@
+overrides:
+  miniflare>sharp: 0.35.4
+allowBuilds:
+  esbuild: true
+  unrs-resolver: true
+  workerd: true
+packageImportMethod: auto
+storeDir: ${SITES_PNPM_SHARED_STORE:-.sites-runtime/pnpm-store}
+cacheDir: ${SITES_PNPM_SHARED_STORE:-.sites-runtime/pnpm-store}/policy-cache

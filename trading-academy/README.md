@@ -15,7 +15,7 @@ An iPhone-first educational application. All money is virtual. The app never pla
 
 ## Not yet available
 
-This is not a completed trading simulator. Stock market-order preview/confirmation, an atomic cash ledger and persistent positions are implemented, but remain disabled until a licensed real-time provider is activated. Stock search, gainers/losers and historical line charts are implemented against the provider API but have not been verified with a live credential. Official news feeds and a read-only options-chain section are implemented. Company news, active-stock rankings, index dashboards, live portfolio valuations, limit-order processing, options execution and expiration processing are not implemented. The app explicitly blocks trading and shows no invented market data. No stock-market API credential was found in the accessible existing projects. A licensed stock/options provider connection and verified entitlements are still required.
+Live stock prices and practice orders still require a licensed provider connection and verified product access. Market/limit order preview, atomic cash reservations and fills, saved positions and measured portfolio history are implemented; actual live operation has not been verified here. Options chains are read-only and options execution/expiration processing are not implemented. Company news, active-stock rankings, index dashboards and daily P/L remain unavailable. Official regulatory/central-bank news is available separately. No missing quote is invented or used to fill an order.
 
 The hosted site is public. Practice-account records remain protected by individual server-validated sessions; usernames alone cannot access them.
 
@@ -60,3 +60,11 @@ Portfolio totals use actual provider snapshots with per-position timestamps. Mis
 
 ### Existing provider subscriptions
 Owner setup now supports Finnhub and StockData.org alongside Massive. Finnhub supports company lookup, latest prices, and (when separately enabled and endpoint access verified) real-time bid/ask practice fills using provider market status. StockData.org supports exact-symbol latest IEX price lookup only. Its offset-free local timestamps are preserved as text and never used as execution timestamps. Finnhub valuation is limited to five held symbols per response; portfolios with missing marks remain unvalued. Alternate connections do not support movers, historical charts, or options chains. Quiver is not used for execution quotes. Provider API keys must be entered through owner-only encrypted setup; ChatGPT account access does not supply provider credentials. Existing options permissions are preserved until a connection is replaced; replacement through the simplified setup does not enable options.
+
+## Watchlist and provider repairs
+
+Saved watchlists now request actual provider reports in account-isolated pages of five symbols, with manual refresh, individual source timestamps and per-symbol errors. A failed symbol leaves its price blank while successful reports remain visible. Finnhub/StockData connections show search and latest-price viewing without requesting unsupported movers/history. Authorized delayed display data remains separate from real-time execution eligibility.
+
+The pnpm workspace records the existing sharp override and the required dependency build allowlist; the installer shell entry points retain executable permissions. The frozen dependency install, 23 automated tests, TypeScript check and production build passed for this source update. Tests use isolated fixtures; live provider credentials, hosting migration and physical iPhone behavior were not verified. Browser preview was unavailable.
+
+The existing Site identity is retained in `.openai/hosting.json`. The current connection returned `project_not_found` for that exact project, so this GitHub source update is not a hosted release. Resume from the account/workspace that can access that Site; do not create a replacement or deploy this full-stack source through GitHub Pages.
