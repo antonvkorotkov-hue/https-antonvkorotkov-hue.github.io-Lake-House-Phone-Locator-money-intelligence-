@@ -5,7 +5,7 @@ import {api,grade,hash} from '../lib/sportsbook.mjs';
 const sqlite=new DatabaseSync(':memory:');for(const f of readdirSync('drizzle').filter(f=>f.endsWith('.sql')).sort())sqlite.exec(readFileSync('drizzle/'+f,'utf8'));
 function stmt(sql){let args=[];return {bind(...a){args=a;return this},async first(){return sqlite.prepare(sql).get(...args)||null},async all(){return {results:sqlite.prepare(sql).all(...args)}},async run(){return sqlite.prepare(sql).run(...args)}}}
 const db={prepare:stmt,async batch(commands){sqlite.exec('BEGIN IMMEDIATE');try{const results=[];for(const s of commands)results.push(await s.run());sqlite.exec('COMMIT');return results}catch(e){sqlite.exec('ROLLBACK');throw e}}};
-const env={DB:db,SB_SETUP_SECRET:'test-only-bootstrap-secret'};let requests=0;
+const env={DB:db,SB_ODDS_AUTHORIZED:'1',SB_SETUP_SECRET:'test-only-bootstrap-secret'};let requests=0;
 async function call(path,body,cookies='',csrf=''){const headers={'cf-connecting-ip':String(++requests),'Origin':'https://unit.test'};if(cookies)headers.Cookie=cookies;if(csrf)headers['X-CSRF-Token']=csrf;if(path==='setup')headers['X-Setup-Secret']=env.SB_SETUP_SECRET;return api(new Request('https://unit.test/api/sportsbook/'+path,{method:body===undefined?'GET':'POST',headers,body:body===undefined?undefined:JSON.stringify(body)}),env)}
 function auth(r){const cookies=r.headers.getSetCookie();return {cookie:cookies.map(v=>v.split(';')[0]).join('; '),csrf:cookies.find(v=>v.startsWith('lh_csrf=')).split(';')[0].slice(8)}}
 let r=await call('setup',{username:'anton',password:'test-owner-password-123'});assert.equal(r.status,200);
@@ -33,4 +33,35 @@ r=await call('login',{username:'friend',password:'recovered-friend-password'});c
 assert.equal((await call('members/'+f.id,{enabled:false,reason:'test disable',request_key:'disable-test-key-123'},owner.cookie,owner.csrf)).status,200);assert.equal((await call('me',undefined,again.cookie)).status,401);
 const before=sqlite.prepare('SELECT count(*) n FROM sb_postings').get().n;assert.equal(sqlite.prepare('SELECT sum(delta) n FROM sb_postings').get().n,0);assert(before>0);
 for(const [q,res,expected] of [[{market:'spread',side:'home',line:-10,period:'full'},{state:'final',scores:{home:20,away:10}},'push'],[{market:'total',side:'under',line:31,period:'full'},{state:'final',scores:{home:20,away:10}},'win'],[{market:'moneyline',side:'home',period:'full'},{state:'cancelled'},'void'],[{market:'player_prop',side:'over',line:20,subject:'p',period:'full'},{state:'final',props:{}},null]])assert.equal(grade(q,res),expected);
+assert.equal((await call('reconciliation',undefined,friend.cookie)).status,401); // Disabled session cannot access administrator reports.
+const postingsBeforeReconciliation=sqlite.prepare('SELECT count(*) AS n FROM sb_postings').get().n;
+const reconciliationResponse=await call('reconciliation',undefined,owner.cookie);
+assert.equal(reconciliationResponse.status,200);
+const reconciliation=await reconciliationResponse.json();
+assert.equal(reconciliation.read_only,true);
+for(const category of ['overdue_pending','status_mismatches','missing_settlements','unbalanced_transactions','payout_mismatches'])assert(Array.isArray(reconciliation[category]));
+const day=new Date().toISOString().slice(0,10);
+const inRange=await call('reconciliation?from='+day+'&to='+day,undefined,owner.cookie);
+assert.equal(inRange.status,200);
+const todayReport=await inRange.json();
+assert(Array.isArray(todayReport.user_summaries));
+assert(todayReport.user_summaries.some(x=>x.username&&Number.isInteger(x.picks)));
+assert.equal((await call('reconciliation?from=bad',undefined,owner.cookie)).status,422);
+assert.equal((await call('reconciliation?from=2026-10-27&to=2026-10-26',undefined,owner.cookie)).status,422);
+const noRecords=await call('reconciliation?from=2000-01-01&to=2000-01-01',undefined,owner.cookie);
+assert.equal(noRecords.status,200);
+assert(noRecords.json);
+const oldReport=await noRecords.json();
+assert(oldReport.user_summaries.every(x=>x.picks===0));
+assert(todayReport.user_summaries.every(x=>Number.isInteger(x.wins)&&Number.isInteger(x.losses)&&Number.isInteger(x.pending)));
+assert(todayReport.user_summaries.every(x=>Number.isFinite(x.net_points)));
+assert(todayReport.user_summaries.every(x=>x.wins+x.losses+x.pushes+x.pending<=x.picks));
+assert(todayReport.user_summaries.every(x=>[x.picks,x.wins,x.losses,x.pushes,x.pending].every(n=>Number.isInteger(n)&&n>=0)));
+assert.equal(oldReport.overdue_pending.length,0);
+assert.equal(oldReport.status_mismatches.length,0);
+assert.equal(oldReport.missing_settlements.length,0);
+assert.equal(oldReport.payout_mismatches.length,0);
+assert.equal(oldReport.unbalanced_transactions.length,0);
+assert.equal((await call('reconciliation?from=2026-02-30',undefined,owner.cookie)).status,422);
+assert.equal(sqlite.prepare('SELECT count(*) AS n FROM sb_postings').get().n,postingsBeforeReconciliation);
 console.log('PASS: real migration/API tests — sole owner, invitations, sessions, isolation, retries, balance protection, disabling, recovery, CSRF and ledger invariants; grading cases.');
