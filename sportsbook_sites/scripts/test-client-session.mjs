@@ -1,0 +1,14 @@
+import assert from 'node:assert/strict';
+import vm from 'node:vm';
+import {readFileSync} from 'node:fs';
+const code=readFileSync('public/sportsbook-assets/client-session.js','utf8');
+const memory=new Map(),sessionStorage={getItem:k=>memory.get(k)||null,setItem:(k,v)=>memory.set(k,v),removeItem:k=>memory.delete(k)};
+const tab=()=>{const scope={window:{},sessionStorage};vm.runInNewContext(code,scope);return scope.window.LHClient};
+let first=tab();assert.equal(Object.keys(first.headers()).length,0);
+const fixture={session_token:'a'.repeat(43),csrf_token:'b'.repeat(43)};
+await first.accept(fixture);assert.equal(first.headers().Authorization,'Bearer '+fixture.session_token);assert.equal(first.headers()['X-CSRF-Token'],fixture.csrf_token);
+const refreshed=tab();assert.equal(refreshed.headers().Authorization,first.headers().Authorization);
+await refreshed.clear();assert.equal(Object.keys(tab().headers()).length,0);
+const denied={getItem(){throw Error('storage denied')},setItem(){throw Error('storage denied')},removeItem(){throw Error('storage denied')}};
+const scope={window:{},sessionStorage:denied};vm.runInNewContext(code,scope);await scope.window.LHClient.accept(fixture);assert.equal(scope.window.LHClient.headers().Authorization,'Bearer '+fixture.session_token);await scope.window.LHClient.clear();
+console.log('PASS client session fallback: no cookies required, tab refresh retention, logout clearing, denied-storage handling. Tokens never logged.');
