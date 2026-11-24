@@ -1,7 +1,7 @@
 {
   "name": "Lake House Virtual Sportsbook",
   "short_name": "Lake House",
-  "start_url": "/sportsbook",
+  "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0b1421",

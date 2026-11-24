@@ -1,0 +1,58 @@
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readFileSync,readdirSync} from 'node:fs';
+import {settle,grade} from '../lib/sportsbook.mjs';
+import {hasVerifiedScores} from '../lib/sportsbook-feeds.mjs';
+
+assert.equal(hasVerifiedScores([{homeAway:'home',score:'21'},{homeAway:'away',score:14}]),true);
+for(const bad of [null,'',undefined,'x'])assert.equal(hasVerifiedScores([{homeAway:'home',score:bad},{homeAway:'away',score:14}]),false);
+assert.equal(hasVerifiedScores([{homeAway:'home',score:21}]),false);
+const finalScore={state:'final',scores:{home:21,away:14}};
+assert.equal(grade({market:'team_total',subject:'invalid',side:'over',line:20,period:'full'},finalScore),null);
+assert.equal(grade({market:'total',side:'over',line:'invalid',period:'full'},finalScore),null);
+assert.equal(grade({market:'player_prop',subject:'missing',side:'over',line:10,period:'full'},finalScore),null);
+assert.equal(grade({market:'spread',side:'home',line:null,period:'full'},finalScore),null);
+assert.equal(grade({market:'total',side:'over',line:null,period:'full'},finalScore),null);
+assert.equal(grade({market:'team_total',subject:'home',side:'over',line:'',period:'full'},finalScore),null);
+assert.equal(grade({market:'moneyline',side:'unknown',period:'full'},finalScore),null);
+assert.equal(grade({market:'total',side:'unknown',line:30,period:'full'},finalScore),null);
+const sql=new DatabaseSync(':memory:');
+for(const f of readdirSync('drizzle').filter(x=>x.endsWith('.sql')).sort())sql.exec(readFileSync('drizzle/'+f,'utf8'));
+const db={prepare(q){let params=[];return{bind(...x){params=x;return this},async first(){return sql.prepare(q).get(...params)||null},async all(){return{results:sql.prepare(q).all(...params)}},async run(){return sql.prepare(q).run(...params)}}}};
+const t=Math.floor(Date.now()/1000);
+const uid='fixture-member',pick='fixture-pick',event='nfl:fixture';
+sql.prepare("INSERT INTO sb_users(id,username,password_hash,role,enabled,initial_balance,created_at) VALUES(?,?,?,'admin',1,100000,?)").run(uid,'fixture_admin','fixture-hash',t);
+sql.prepare("INSERT INTO sb_events VALUES(?,?,?,?,?,?,?,?)").run(event,'nfl','Away @ Home',t+3600,'scheduled','fixture',t,'{}');
+sql.prepare("INSERT INTO sb_quotes VALUES('fixture-quote',?,'moneyline','Home',100,NULL,'home',NULL,'full','fixture',?,?,?,?,0,0,1)").run(event,t,t,t+120,t+3600);
+const quote={market:'moneyline',side:'home',period:'full',line:null};
+sql.prepare("INSERT INTO sb_picks(id,user_id,quote_id,event_id,event_name,selection,odds,stake,potential_return,request_key,created_at,snapshot,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").run(pick,uid,'fixture-quote',event,'Away @ Home','Home',100,10000,20000,'fixture-request',t,JSON.stringify(quote),'pending');
+const count=()=>sql.prepare('SELECT count(*) AS n FROM sb_settlements').get().n;
+const balance=()=>sql.prepare("SELECT sum(delta) AS n FROM sb_postings WHERE account=?").get('member:'+uid).n;
+const status=()=>sql.prepare("SELECT status FROM sb_picks WHERE id=?").get(pick).status;
+const url='https://example.com/fixtures/final';
+await settle(db,event,{state:'final',scores:{home:21,away:14}},url);
+assert.equal(status(),'win');assert.equal(balance(),110000);assert.equal(count(),1);
+await settle(db,event,{state:'final',scores:{home:21,away:14},verification:'equivalent refresh'},url);
+assert.equal(balance(),110000);assert.equal(count(),1);
+await settle(db,event,{state:'final',scores:{home:14,away:21}},url);
+assert.equal(status(),'loss');assert.equal(balance(),90000);assert.equal(count(),2);
+await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
+assert.equal(status(),'push');assert.equal(balance(),100000);assert.equal(count(),3);
+await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
+assert.equal(count(),3);assert.equal(sql.prepare("SELECT sum(delta) AS n FROM sb_postings").get().n,0);
+// A malformed historical record must not block settlement of other accepted picks.
+sql.prepare("INSERT INTO sb_picks(id,user_id,quote_id,event_id,event_name,selection,odds,stake,potential_return,request_key,created_at,snapshot,status) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)").run('invalid-snapshot',uid,'fixture-quote',event,'Away @ Home','Home',100,10000,20000,'fixture-malformed',t,'null','pending');
+await settle(db,event,{state:'final',scores:{home:14,away:14}},url);
+assert.equal(status(),'push');
+assert.equal(sql.prepare("SELECT status FROM sb_picks WHERE id='invalid-snapshot'").get().status,'pending');
+assert.equal(count(),3);
+
+// Two simultaneous identical requests must not issue duplicate credits.
+const concurrentResult={state:'final',scores:{home:22,away:14}};
+await Promise.all([settle(db,event,concurrentResult,url),settle(db,event,concurrentResult,url)]);
+assert.equal(status(),'win');
+assert.equal(count(),4);
+assert.equal(balance(),100000);
+assert.equal(sql.prepare("SELECT sum(delta) AS n FROM sb_postings").get().n,0);
+
+console.log('PASS settlement outcome corrections and no duplicate virtual credits');
